@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Support\Str;
 use Pdo\Mysql;
 
@@ -31,6 +33,20 @@ return [
     */
 
     'connections' => [
+
+        'payroll_testing' => [
+            'driver' => 'mysql',
+            'host' => env('PAYROLL_TEST_DB_HOST', 'payroll_adjustments_cloud_db'),
+            'port' => env('PAYROLL_TEST_DB_PORT', '3306'),
+            'database' => 'payroll_adjustments_test',
+            'username' => env('PAYROLL_TEST_DB_USERNAME', 'payroll_test'),
+            'password' => env('PAYROLL_TEST_DB_PASSWORD', 'payroll_test'),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => true,
+            'engine' => 'InnoDB',
+        ],
 
         'sqlite' => [
             'driver' => 'sqlite',
