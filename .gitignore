@@ -1,7 +1,5 @@
 /vendor/
 node_modules/
-npm-debug.log
-yarn-error.log
 
 # Laravel 4 specific
 bootstrap/compiled.php
@@ -29,3 +27,13 @@ Homestead.json
 .env.production
 .phpactor.json
 auth.json
+
+*.log
+.DS_Store
+.cache
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
+Thumbs.db
