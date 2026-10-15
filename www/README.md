@@ -77,7 +77,12 @@ The InnoDB table has a unique `(aggregate_id, version)` index, which also serves
 Payload example:
 
 ```json
-{"schema_version":1,"currency":"USD","amount_minor":"-4555","comment":"Unpaid leave"}
+{
+    "schema_version":1,
+    "currency":"USD",
+    "amount_minor":"-4555",
+    "comment":"Unpaid leave"
+}
 ```
 
 A command loads an aggregate at version N, applies a domain operation, and passes the unit of work to `EventStore::append()`. Inside one transaction the store compares N with the stored maximum version and inserts every pending event. A mismatched version raises `ConcurrencyConflict`. If another connection commits after the comparison, the unique stream-version constraint closes that race; its database exception is translated into the same application failure. Duplicate creation also conflicts.

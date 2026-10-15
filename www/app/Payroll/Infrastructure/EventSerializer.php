@@ -17,9 +17,19 @@ use JsonException;
 use stdClass;
 use TypeError;
 
+/**
+ * Explicit boundary between domain facts and the versioned storage format.
+ * Stored event names are independent of PHP class names. Unknown formats fail
+ * closed instead of guessing values that could alter financial history.
+ */
 final class EventSerializer
 {
-    /** @return array{aggregate_id: string, event_id: string, version: int, event_type: string, payload: string, occurred_at: string} */
+    /**
+     * Encode cents as integer strings to preserve precision in JSON consumers.
+     * Normalize timestamps to UTC while retaining their microseconds.
+     *
+     * @return array{aggregate_id: string, event_id: string, version: int, event_type: string, payload: string, occurred_at: string}
+     */
     public function serialize(PayrollEvent $event): array
     {
         $payload = ['schema_version' => 1, 'currency' => 'USD', 'amount_minor' => (string) $event->amount->minorUnits];
@@ -41,6 +51,10 @@ final class EventSerializer
         ];
     }
 
+    /**
+     * Validate the payload shape and exact values before constructing a fact.
+     * The timestamp round-trip check rejects dates PHP would otherwise normalize.
+     */
     public function deserialize(stdClass $row): PayrollEvent
     {
         try {

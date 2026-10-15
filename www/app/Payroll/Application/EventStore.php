@@ -6,12 +6,18 @@ namespace App\Payroll\Application;
 
 use App\Payroll\Domain\PayrollLine;
 
+/**
+ * Persistence boundary exposing reconstruction and append-only writes.
+ * No operation can update or remove an existing audit fact.
+ */
 interface EventStore
 {
     public function load(string $id): PayrollLine;
 
     /**
      * Append a unit of work once. Reload before the next operation.
+     * The entire pending batch must succeed or leave persisted history unchanged.
+     * Implementations compare expectedVersion() to detect stale aggregate state.
      *
      * @throws ConcurrencyConflict
      */

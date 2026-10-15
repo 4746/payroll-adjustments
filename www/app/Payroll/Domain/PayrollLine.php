@@ -8,10 +8,22 @@ use DateTimeImmutable;
 use DateTimeZone;
 use InvalidArgumentException;
 
+/**
+ * Consistency boundary for one payroll line and its ordered event stream.
+ *
+ * Calculations replace the amount until the first manual adjustment. That
+ * adjustment freezes the latest system amount permanently; thereafter the
+ * current amount is the frozen baseline plus every accepted adjustment.
+ * New operations and replay share apply() so both enforce the same invariants.
+ */
 final class PayrollLine
 {
     private Money $amount;
 
+    /**
+     * Null means automatic calculations are still allowed. Once set, this also
+     * acts as the permanent override marker, even when adjustments sum to zero.
+     */
     private ?Money $frozenSystemAmount = null;
 
     private int $version = 0;
@@ -32,6 +44,9 @@ final class PayrollLine
         }
     }
 
+    /**
+     * Start a new stream with a calculation, pending persistence at version 1.
+     */
     public static function create(string $id, Money $amount): self
     {
         $line = new self($id);
@@ -40,7 +55,14 @@ final class PayrollLine
         return $line;
     }
 
-    /** @param list<PayrollEvent> $events */
+    /**
+     * Restore persisted facts without recording them as new work to save.
+     * Stream versions define application order; timestamps need not be unique.
+     *
+     * @param  list<PayrollEvent>  $events
+     *
+     * @throws InvalidHistory If the stream is empty or violates domain invariants.
+     */
     public static function reconstitute(string $id, array $events): self
     {
         if ($events === []) {
@@ -55,6 +77,10 @@ final class PayrollLine
         return $line;
     }
 
+    /**
+     * Ignore recalculations after manual override, including event creation.
+     * The ignored value must never replace either the total or frozen baseline.
+     */
     public function recalculate(Money $amount): void
     {
         if ($this->frozenSystemAmount !== null) {
@@ -64,6 +90,13 @@ final class PayrollLine
         $this->record($this->calculation($amount));
     }
 
+    /**
+     * Append a signed correction with its original explanation.
+     * Mistakes require another compensating adjustment; history is never edited.
+     *
+     * @throws InvalidAdjustment If the delta is zero or the comment is blank/invalid UTF-8.
+     * @throws \OverflowException If the resulting total exceeds integer capacity.
+     */
     public function applyAdjustment(Money $amount, string $comment): void
     {
         $this->record(new ManualAdjustmentApplied(
@@ -87,18 +120,32 @@ final class PayrollLine
         return $this->version;
     }
 
+    /**
+     * Version observed when this unit of work was loaded (zero for a new line).
+     * The store compares it with persisted history to detect competing writes.
+     */
     public function expectedVersion(): int
     {
         return $this->version - count($this->pendingEvents);
     }
 
-    /** @return list<ManualAdjustmentApplied> */
+    /**
+     * Immutable adjustment facts in application order, including pending work.
+     *
+     * @return list<ManualAdjustmentApplied>
+     */
     public function adjustments(): array
     {
         return $this->adjustments;
     }
 
-    /** @return list<PayrollEvent> */
+    /**
+     * New facts to append atomically, never events restored through replay.
+     * Append this unit of work once, then reload before the next operation.
+     * The buffer is retained so a failed write can be retried without losing work.
+     *
+     * @return list<PayrollEvent>
+     */
     public function pendingEvents(): array
     {
         return $this->pendingEvents;
@@ -112,12 +159,23 @@ final class PayrollLine
         );
     }
 
+    /**
+     * Accept the transition before adding it to the persistence buffer.
+     * A rejected operation must not leave an event waiting to be saved.
+     */
     private function record(PayrollEvent $event): void
     {
         $this->apply($event);
         $this->pendingEvents[] = $event;
     }
 
+    /**
+     * Shared transition function for new events and historical replay.
+     * Calculations after override indicate corrupt history: live recalculations
+     * are ignored before an event is created, so such a fact cannot be valid.
+     * Adjustment arithmetic completes before any state changes, ensuring an
+     * overflow cannot freeze the baseline or partially apply the adjustment.
+     */
     private function apply(PayrollEvent $event): void
     {
         if ($event->aggregateId !== $this->id || $event->version !== $this->version + 1 || isset($this->eventIds[$event->eventId])) {

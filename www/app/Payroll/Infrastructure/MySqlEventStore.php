@@ -11,6 +11,10 @@ use App\Payroll\Domain\PayrollLine;
 use Illuminate\Database\Connection;
 use Illuminate\Database\UniqueConstraintViolationException;
 
+/**
+ * Stores facts only; balances and audit views are derived by replay.
+ * Append-only access is enforced by this API, not against privileged SQL access.
+ */
 final readonly class MySqlEventStore implements EventStore
 {
     public function __construct(private Connection $connection, private EventSerializer $serializer) {}
@@ -27,6 +31,12 @@ final readonly class MySqlEventStore implements EventStore
         return PayrollLine::reconstitute($id, $rows->map($this->serializer->deserialize(...))->all());
     }
 
+    /**
+     * Persist all pending facts within one transaction.
+     * The version comparison catches already stale writers; the unique stream
+     * version constraint catches competitors committing after that comparison.
+     * Pending events remain on the aggregate so failed batches can be retried.
+     */
     public function append(PayrollLine $line): void
     {
         if ($line->pendingEvents() === []) {

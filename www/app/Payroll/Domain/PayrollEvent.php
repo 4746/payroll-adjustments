@@ -7,6 +7,12 @@ namespace App\Payroll\Domain;
 use DateTimeImmutable;
 use InvalidArgumentException;
 
+/**
+ * Immutable payroll fact with identity, stream order and occurrence time.
+ * Version determines application order; timestamps are traceability metadata.
+ * Validation also runs during deserialization so replay cannot bypass the
+ * non-zero adjustment and mandatory comment policies.
+ */
 abstract readonly class PayrollEvent
 {
     final public function __construct(
