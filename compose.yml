@@ -1,0 +1,83 @@
+name: payroll_adjustments_cloud
+
+services:
+  payroll_adjustments_cloud:
+    container_name: payroll_adjustments_cloud
+    image: docker.io/vadik/payroll_adjustments_cloud:latest
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      args:
+        - PGID=1000
+        - PUID=1000
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/php/www.conf:/usr/local/etc/php-fpm.d/www-local.conf
+      - ./docker/php/xdebug.ini:/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+      - payroll_adjustments_cloud_framework_cache_volume:/var/www/storage/framework/framework:delegated  # Використання volume для кешу
+      - ./www:/var/www
+    environment:
+      PHP_IDE_CONFIG: "serverName=Docker"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - payroll_adjustments_cloud_db
+      - payroll_adjustments_cloud_redis
+    networks:
+      - payroll_adjustments_cloud_network
+
+  payroll_adjustments_cloud_db:
+    image: mysql:8.4.7
+    container_name: payroll_adjustments_cloud_db
+    restart: unless-stopped
+    ports:
+      - "33067:3306"
+    environment:
+      MYSQL_DATABASE: payroll_adjustments_cloud_local
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: mysql
+      MYSQL_PASSWORD: mysql
+      MYSQL_LOG_CONSOLE: "1"      # лог в stderr (видно через docker logs)
+      MYSQL_INITDB_SKIP_TZINFO: "1"  # не грузити таймзони при init
+#      TZ: Europe/Kyiv
+    volumes:
+      - payroll_adjustments_cloud_db_cache_volume:/var/lib/mysql
+    networks:
+      - payroll_adjustments_cloud_network
+
+  payroll_adjustments_cloud_redis:
+    image: redis:7.0
+    container_name: payroll_adjustments_cloud_redis
+    restart: unless-stopped
+    command: [ "redis-server", "--bind", "0.0.0.0", "--port", "6379" ]
+    volumes:
+      - payroll_adjustments_cloud_redis_volume:/var/lib/redis
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf
+    ports:
+      - "63791:6379"
+    networks:
+      - payroll_adjustments_cloud_network
+
+  payroll_adjustments_cloud_php_redis_admin:
+    image: erikdubbelboer/phpredisadmin
+    container_name: payroll_adjustments_cloud_php_redis_admin
+    restart: unless-stopped
+    environment:
+      REDIS_1_HOST: payroll_adjustments_cloud_redis
+      REDIS_1_NAME: DockerRedis
+      REDIS_1_PORT: 6379
+    ports:
+      - "8084:80"
+    networks:
+      - payroll_adjustments_cloud_network
+    depends_on:
+      - payroll_adjustments_cloud_redis
+networks:
+  payroll_adjustments_cloud_network:
+    driver: bridge
+
+volumes:
+  payroll_adjustments_cloud_redis_volume:
+  payroll_adjustments_cloud_framework_cache_volume:
+  payroll_adjustments_cloud_db_cache_volume:
