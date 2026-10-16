@@ -1,17 +1,20 @@
 # Alcor Payroll Adjustments
 
-A proof of concept for payroll specialists who need to correct automatically calculated salaries without losing the original calculation or the reason for each correction. The event stream is the authoritative record; the current amount and audit history are reconstructed from it.
+A proof of concept for payroll specialists who need to correct automatically calculated salaries without losing the original calculation or the reason for each correction. The event stream is the authoritative record; current state is maintained alongside it for fast reads, while audit history and state rebuilds replay events.
 
 ## Architecture and key decisions
 
-The design was recorded before implementation: one payroll line is one aggregate and one ordered event stream, Money uses exact integer cents, the first adjustment permanently freezes the system baseline, MySQL appends event batches atomically with optimistic concurrency, and read queries replay events without projection tables.
+One payroll line is one aggregate and one ordered event stream. Money uses exact integer minor units, and the first adjustment permanently freezes the system baseline. MySQL commits events and current state together with optimistic concurrency. Normal reads and changes load current state; audit and rebuild operations replay the journal.
 
-- **Domain — `app/Payroll/Domain`:** framework-independent PHP aggregate, immutable Money and domain events, invariant enforcement, event replay. No Laravel, Eloquent, HTTP, or database dependencies.
-- **Application — `app/Payroll/Application`:** three state-changing use cases (`CreatePayrollLine`, `RecalculatePayrollLine`, `ApplyManualAdjustment`), two queries (`GetPayrollLineAmount`, `GetAdjustmentHistory`), immutable audit result, and the `EventStore` port.
-- **Infrastructure — `app/Payroll/Infrastructure`:** Laravel query-builder MySQL event store, transaction handling, explicit versioned serialization.
-- **Composition:** `AppServiceProvider` binds the port to the database implementation using constructor injection. Artisan provides a demonstration entry point.
+- **Domain — `app/Payroll/Domain`:** framework-independent PHP aggregate, immutable Money and domain events, currency and event-type enums, ID validators, decimal amount parser, invariant enforcement and event replay. No Laravel, Eloquent, HTTP, or database dependencies.
+- **Application — `app/Payroll/Application`:** three state-changing use cases (`CreatePayrollLine`, `RecalculatePayrollLine`, `ApplyManualAdjustment`), three queries (`GetPayrollLineAmount`, `GetPayrollLines`, `GetAdjustmentHistory`), immutable audit result, and the `EventStore` port.
+- **Infrastructure — `app/Payroll/Infrastructure`:** Laravel query-builder MySQL implementation of `EventStore`, current-state and journal persistence, atomic writes, optimistic concurrency, versioned serialization and state rebuilding.
+- **HTTP — `app/Payroll/Http`:** `Controllers` invoke application use cases; `Requests` contain Laravel Form Request input validation; `Resources` format API responses with decimal amount strings and UTC timestamps. HTTP classes live inside the payroll module, and API versioning remains in `routes/api.php` rather than nested controller folders.
+- **Composition and CLI:** `AppServiceProvider` binds `EventStore` to its MySQL implementation through constructor injection. `app/Console/Commands` contains the demonstration and current-state rebuild commands.
 
-DDD gives the financial rules a small testable boundary. Event Sourcing fits this particular audit requirement because the immutable sequence of decisions is itself valuable. CQRS-lite keeps changes separate from queries while sharing the same storage. These choices are appropriate for this PoC, rather than prerequisites for every payroll application. There is no command bus, asynchronous delivery, projection table, Eloquent aggregate, or external event-sourcing package.
+For an HTTP write, Laravel validates the Form Request, the controller calls an Application use case, and the use case invokes Domain behavior, loading existing state through `EventStore` when updating a payroll line. The Infrastructure implementation commits current state and pending events together; the controller then returns a resource. Current amounts and lists read `payrolls`; full audit reads `payroll_events`. Domain does not depend on the outer layers. HTTP may use domain types to validate input or present results, but payroll business rules remain enforced by Domain.
+
+DDD gives the financial rules a small testable boundary. Event Sourcing preserves the authoritative sequence of facts. CQRS-lite separates changes from queries, with a synchronously maintained current-state table in the same database. There is no command bus, asynchronous delivery, Eloquent aggregate, or external event-sourcing package.
 
 Implementation followed Money → domain events and aggregate → replay → MySQL persistence → application use cases → CLI → verification. No application dependencies or Docker configuration were changed.
 
@@ -53,7 +56,7 @@ Supported minor units are `PHP_INT_MIN` through `PHP_INT_MAX`, equivalent to USD
 
 `PayrollLine::reconstitute($id, $events)` applies the same state transitions without creating new pending events. The initial and later automatic calculations establish the system amount; the first adjustment freezes it, and each adjustment adds its delta. Invalid or unknown history fails closed.
 
-Queries load the ordered stream in one database read and return either Money or an immutable `AdjustmentHistory` containing the payroll line ID, current amount, nullable frozen baseline, and all adjustment events. Each adjustment retains its event ID, version, timestamp, delta, and original comment. This avoids inconsistent separately queried totals and history.
+Current amount queries and state-changing operations load one row from `payrolls`. List queries read current states in one query without loading event history. Audit queries replay the ordered journal and return an immutable `AdjustmentHistory` containing the payroll line ID, current amount, nullable frozen baseline, and all adjustment events with their IDs, versions, timestamps, deltas and original comments.
 
 Application order is determined by **stream version**, not timestamps. UTC timestamps retain microseconds but can tie or move backwards if the system clock changes. Event IDs use 128 random bits represented as 32 lowercase hexadecimal characters; the database enforces uniqueness.
 
@@ -61,18 +64,37 @@ Immutable audit history differs from a mutable adjustments table: a mutable list
 
 ## Persistence and concurrency
 
+Both tables use InnoDB. Events are the authoritative history; current state is updated synchronously and can be rebuilt from events.
+
+### `payrolls` — current state
+
+Migration: `database/migrations/2026_10_15_111749_create_payrolls_table.php`.
+
+| Column | Purpose |
+| --- | --- |
+| `id VARCHAR(128)` | Primary key; one current-state row per payroll line |
+| `current_amount_minor BIGINT` | Current amount in signed integer minor units |
+| `currency CHAR(3)` | Currency fixed for the payroll line |
+| `frozen_system_amount_minor BIGINT NULL` | Frozen system baseline; `NULL` means not frozen, while zero is a valid frozen amount |
+| `version BIGINT UNSIGNED` | Last applied event version; used for optimistic concurrency |
+| `updated_at DATETIME(6)` | UTC time when state was written |
+
+### `payroll_events` — immutable journal
+
 Migration: `database/migrations/2026_10_15_151749_create_payroll_events_table.php`.
 
 | Column | Purpose |
 | --- | --- |
 | `event_id CHAR(32)` | Global primary key; unique event identity |
-| `aggregate_id VARCHAR(128)` | Case-sensitive payroll line ID |
+| `payroll_id VARCHAR(128)` | Payroll line ID matching `payrolls.id` |
 | `version BIGINT UNSIGNED` | Contiguous aggregate sequence starting at 1 |
-| `event_type VARCHAR(64)` | Explicit `payroll_line_calculated.v1` or `manual_adjustment_applied.v1` |
+| `event_type VARCHAR(64)` | Enum-backed `calculated.v1` or `manual_adjustment_applied.v1` |
 | `payload JSON` | Schema version, USD currency, exact cents, and adjustment comment |
 | `occurred_at DATETIME(6)` | Event creation timestamp normalized to UTC |
 
-The InnoDB table has a unique `(aggregate_id, version)` index, which also serves ordered stream reads. The event ID primary key and stream-version constraint prevent duplicate identities and lost updates. No mutable payroll balance table is maintained.
+The journal has a unique `(payroll_id, version)` index, which also serves ordered stream reads. Its `event_id` primary key prevents duplicate event identities.
+
+The relationship is one payroll line to many events: `payrolls.id = payroll_events.payroll_id`. This is a logical relationship; the migrations do not declare a foreign key. State IDs, journal payroll IDs and event IDs use `ascii_bin` for case-sensitive comparisons; state currency uses the same collation. `payrolls` has only its primary-key index. Full history is read only for audit or rebuild, so normal reads and changes do not need a separate periodic snapshot table.
 
 Payload example:
 
@@ -85,7 +107,7 @@ Payload example:
 }
 ```
 
-A command loads an aggregate at version N, applies a domain operation, and passes the unit of work to `EventStore::append()`. Inside one transaction the store compares N with the stored maximum version and inserts every pending event. A mismatched version raises `ConcurrencyConflict`. If another connection commits after the comparison, the unique stream-version constraint closes that race; its database exception is translated into the same application failure. Duplicate creation also conflicts.
+A command loads current state at version N, applies a domain operation, and passes the unit of work to `EventStore::append()`. Inside one transaction the store updates `payrolls` only where the stored version still equals N, then inserts every pending event. If no state row matches, it raises `ConcurrencyConflict`. Creation inserts a new state row; duplicate state IDs, event IDs or stream versions also produce a conflict. If an event write fails, the state change rolls back with it.
 
 Other write failures propagate, and the transaction rolls back the entire batch. Rejected domain operations never reach append. Ignored recalculations have no pending events and perform no writes. There is no automatic retry of business commands: a caller must reload and decide whether to reapply its intent.
 
@@ -93,7 +115,7 @@ An aggregate is a single unit of work: append it once, then discard it and reloa
 
 ### Append-only scope
 
-The application exposes only load and append. Event objects and query results are immutable, and there are no event update/delete application APIs. This is **application-level immutability**, not tamper-proof database enforcement. A privileged SQL client, migration rollback, or code bypassing the store can still change or drop data. Tests may clean up their isolated database directly.
+There are no event update/delete application APIs. Current-state updates and rebuilds change `payrolls`, while the journal remains append-only through the application. Event objects and audit results are immutable. This is **application-level immutability**, not tamper-proof database enforcement. A privileged SQL client, migration rollback, or code bypassing the store can still change or drop data. Tests may clean up their isolated database directly.
 
 A production deployment should separate migration credentials from runtime credentials, grant the runtime user only SELECT/INSERT on the journal, protect backups, and consider external tamper-evident audit storage. The migration's `down()` drops audit history and must not be used casually on real payroll data.
 
@@ -212,6 +234,20 @@ docker compose exec -T -e DB_CONNECTION=payroll_testing payroll_adjustments_clou
 
 The final frozen baseline is **1050.00**, with exactly **five** adjustment records and **seven** total events: two calculations plus five adjustments. Every comment survives persistence and reconstruction. The final amount is **1104.45**.
 
+## Rebuild current state — `payroll:rebuild-states`
+
+Reconstruct `payrolls` from `payroll_events` when state rows are missing or need to be regenerated:
+
+```bash
+# Every payroll ID present in the journal
+docker compose exec -T payroll_adjustments_cloud php artisan payroll:rebuild-states --no-interaction
+
+# A single payroll line
+docker compose exec -T payroll_adjustments_cloud php artisan payroll:rebuild-states --id=my-example --no-interaction
+```
+
+The command replays the selected history and creates or updates each state row, including amount, currency, frozen baseline and version. It does not modify events. Each payroll line is rebuilt in a separate transaction with state and journal locks; earlier successful rebuilds remain committed if a later one fails. Invalid history or a requested ID without events returns a failure. State rows with no journal history are not removed. The command reports the number of rebuilt states and operates on the configured database.
+
 ## Manual HTTP testing
 
 An HTTP adapter is available for local testing of the existing use cases.
@@ -257,9 +293,9 @@ database `payroll_adjustments_cloud_local`, using the Compose development
 credentials. Inspect `payroll_events` using your request's ID:
 
 ```sql
-SELECT aggregate_id, version, event_id, event_type, payload, occurred_at
+SELECT payroll_id, version, event_id, event_type, payload, occurred_at
 FROM payroll_events
-WHERE aggregate_id = 'http-example-1'
+WHERE payroll_id = 'http-example-1'
 ORDER BY version;
 ```
 
@@ -277,7 +313,7 @@ Production exposure requires access control.
 ## Assumptions, limitations, and production improvements
 
 - This PoC focuses on one payroll line. It does not model employees, payroll periods, approval workflows, identities of payroll specialists, or multiple currencies.
-- Replaying a whole stream costs O(number of events) in time and memory. This is reasonable for short payroll histories. Add snapshots or independently rebuildable projections only when measured volume justifies them.
+- Full audit and rebuild operations cost O(number of events) in time and memory. Normal reads and state-changing operations load `payrolls` without replaying history; list queries read a page in one query. Full audit history is currently not paginated.
 - Event types and payloads are explicitly versioned; unknown schemas fail instead of guessing. Production event evolution needs migrations/upcasters and compatibility policies.
 - Random event IDs provide traceability, not business-command idempotency. A caller must not blindly retry an adjustment after an uncertain network/commit outcome; production integrations should add explicit idempotency keys.
 - Optimistic conflicts are surfaced, not automatically resolved. Deadlocks and operational database failures propagate; production callers need an appropriate retry policy and monitoring.

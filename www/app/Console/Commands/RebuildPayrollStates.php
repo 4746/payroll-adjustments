@@ -20,7 +20,12 @@ class RebuildPayrollStates extends Command
         try {
             $id = $this->option('id');
             $ids = $id === null
-                ? DB::table('payroll_events')->select('payroll_id')->distinct()->orderBy('payroll_id')->lazy(100)->pluck('payroll_id')
+                ? DB::table('payroll_events')
+                    ->select('payroll_id')
+                    ->distinct()
+                    ->orderBy('payroll_id')
+                    ->lazy(100)
+                    ->pluck('payroll_id')
                 : [$id];
             $count = 0;
 
