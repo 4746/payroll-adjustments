@@ -13,6 +13,7 @@ use App\Payroll\Application\GetPayrollLineAmount;
 use App\Payroll\Application\PayrollLineNotFound;
 use App\Payroll\Application\RecalculatePayrollLine;
 use App\Payroll\Domain\InvalidAdjustment;
+use App\Payroll\Domain\ManualAdjustmentApplied;
 use App\Payroll\Domain\Money;
 use App\Payroll\Domain\PayrollLine;
 use App\Payroll\Infrastructure\EventSerializer;
@@ -95,6 +96,37 @@ class MySqlEventStoreTest extends TestCase
         $this->assertSame(0, $loaded->frozenSystemAmount()->minorUnits);
         $this->assertSame('1.00', $loaded->amount()->toDecimal());
         $this->assertSame([], $loaded->pendingEvents());
+    }
+
+    /** Compensation restores the amount, but must never restore automatic recalculation. */
+    public function test_compensation_keeps_recalculations_blocked_after_loading_current_state(): void
+    {
+        $store = $this->app->make(EventStore::class);
+        $create = $this->app->make(CreatePayrollLine::class);
+        $adjust = $this->app->make(ApplyManualAdjustment::class);
+        $recalculate = $this->app->make(RecalculatePayrollLine::class);
+        $create->handle(id: 'compensated-line', amount: Money::fromDecimal(amount: '1000'));
+        $adjust->handle(id: 'compensated-line', amount: '-10', comment: 'Deduction');
+        $adjust->handle(id: 'compensated-line', amount: '10', comment: 'Compensate deduction');
+        $historyBefore = DB::table('payroll_events')->where('payroll_id', 'compensated-line')->orderBy('version')->get()->toJson();
+
+        $loaded = $store->load(id: 'compensated-line');
+        $this->assertSame('1000.00', $loaded->amount()->toDecimal());
+        $this->assertSame('1000.00', $loaded->frozenSystemAmount()?->toDecimal());
+        $this->assertSame(3, $loaded->version());
+        $this->assertSame([], $loaded->pendingEvents());
+
+        $result = $recalculate->handle(id: 'compensated-line', amount: '9999');
+
+        $this->assertSame('1000.00', $result->amount()->toDecimal());
+        $this->assertSame('1000.00', $result->frozenSystemAmount()?->toDecimal());
+        $this->assertSame(3, $result->version());
+        $this->assertSame([], $result->pendingEvents());
+        $this->assertDatabaseHas('payrolls', ['id' => 'compensated-line', 'current_amount_minor' => 100000, 'frozen_system_amount_minor' => 100000, 'version' => 3]);
+        $this->assertSame($historyBefore, DB::table('payroll_events')->where('payroll_id', 'compensated-line')->orderBy('version')->get()->toJson());
+        $audit = $store->history(id: 'compensated-line');
+        $this->assertSame(['-10.00', '10.00'], array_map(fn (ManualAdjustmentApplied $event): string => $event->amount->toDecimal(), $audit->adjustments));
+        $this->assertSame(['Deduction', 'Compensate deduction'], array_column($audit->adjustments, 'comment'));
     }
 
     use LazilyRefreshDatabase;
