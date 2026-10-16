@@ -7,7 +7,7 @@ namespace App\Payroll\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Payroll\Application\GetPayrollLines;
 use App\Payroll\Domain\PayrollLine;
-use Illuminate\Http\Request;
+use App\Payroll\Http\Requests\ListPayrollLinesRequest;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -15,14 +15,14 @@ class ListController extends Controller
 {
     public function __construct(private readonly GetPayrollLines $lines) {}
 
-    public function __invoke(Request $request): AnonymousResourceCollection
+    /**
+     * Return current payroll states under "data" and pagination under "meta"
+     * (page, per_page, has_more), without loading event history.
+     */
+    public function __invoke(ListPayrollLinesRequest $request): AnonymousResourceCollection
     {
-        $input = $request->validate([
-            'page' => ['sometimes', 'integer', 'min:1', 'max:1000000'],
-            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
-        ]);
-        $page = (int) ($input['page'] ?? 1);
-        $perPage = (int) ($input['per_page'] ?? 100);
+        $page = $request->safe()->integer('page', 1);
+        $perPage = $request->safe()->integer('per_page', 100);
         $lines = $this->lines->handle($page, $perPage);
         $hasMore = count($lines) > $perPage;
         $items = array_map(fn (PayrollLine $line): array => [
@@ -34,7 +34,11 @@ class ListController extends Controller
         ], array_slice($lines, 0, $perPage));
 
         return JsonResource::collection($items)->additional([
-            'meta' => ['page' => $page, 'per_page' => $perPage, 'has_more' => $hasMore],
+            'meta' => [
+                'page' => $page,
+                'per_page' => $perPage,
+                'has_more' => $hasMore,
+            ],
         ]);
     }
 }
