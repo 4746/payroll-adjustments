@@ -33,6 +33,10 @@ abstract readonly class PayrollEvent
             if ($amount->minorUnits === 0 || $comment === null || preg_match('/\\S/u', $comment) !== 1) {
                 throw new InvalidAdjustment(message: 'A non-zero adjustment and non-blank UTF-8 comment are required.');
             }
+
+            if (mb_strlen($comment, 'UTF-8') > ManualAdjustmentApplied::MAX_COMMENT_LENGTH) {
+                throw new InvalidAdjustment(message: 'Adjustment comments must not exceed '.ManualAdjustmentApplied::MAX_COMMENT_LENGTH.' characters.');
+            }
         } elseif ($comment !== null) {
             throw new InvalidArgumentException(message: 'Calculation events cannot contain adjustment comments.');
         }

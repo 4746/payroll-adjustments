@@ -19,6 +19,23 @@ class PayrollLineHttpTest extends TestCase
 
     private const string BASE = '/api/v1/payroll-lines';
 
+    public function test_comment_limit_accepts_2000_unicode_characters_and_returns_422_above_it(): void
+    {
+        $comment = str_repeat('ї', 2000);
+        $this->postJson(self::BASE, ['id' => 'comment-line', 'amount' => '100'])->assertCreated();
+
+        $this->postJson(self::BASE.'/comment-line/adjustments', ['amount' => '1', 'comment' => $comment.'я'])
+            ->assertUnprocessable()->assertJsonValidationErrors('comment');
+        $this->assertDatabaseCount('payroll_events', 1);
+        $this->assertDatabaseHas('payrolls', ['id' => 'comment-line', 'version' => 1, 'current_amount_minor' => 10000, 'frozen_system_amount_minor' => null]);
+
+        $this->postJson(self::BASE.'/comment-line/adjustments', ['amount' => '1', 'comment' => $comment])
+            ->assertCreated()->assertJsonPath('data.adjustments.0.comment', $comment);
+        $this->getJson(self::BASE.'/comment-line/adjustments')->assertOk()
+            ->assertJsonPath('data.adjustments.0.comment', $comment);
+        $this->assertDatabaseCount('payroll_events', 2);
+    }
+
     public function test_write_responses_do_not_read_history_and_full_audit_is_still_available(): void
     {
         $this->postJson(self::BASE, ['id' => 'fast-line', 'amount' => '100'])->assertCreated();

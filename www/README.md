@@ -30,6 +30,7 @@ The aggregate enforces:
 - After manual override: **current amount = frozen system amount + all adjustments in application order**.
 - Adjustments are non-zero; positive and negative values are supported.
 - Blank or whitespace-only comments, including Unicode whitespace, are rejected. Accepted comments are preserved exactly.
+- Adjustment comments are limited to **2000 Unicode characters**, counted as UTF-8 code points rather than bytes. The shared domain constant `ManualAdjustmentApplied::MAX_COMMENT_LENGTH` is enforced by both the domain (including event replay) and the HTTP Form Request. Exactly 2000 characters is accepted; 2001 is rejected without changing state or appending an event. HTTP rejects an overlong comment with a 422 field-validation error.
 - Failed validation or arithmetic overflow leaves the aggregate and its pending events unchanged.
 - There are no edit, delete, reset, or unfreeze operations. Correct a mistake with a new compensating adjustment.
 - Replayed events must have contiguous versions starting at 1, matching aggregate IDs, unique event IDs, and valid domain transitions.
@@ -312,6 +313,7 @@ Production exposure requires access control.
 
 ## Assumptions, limitations, and production improvements
 
+- The 2000-character adjustment-comment limit is an explicit implementation assumption agreed for this PoC; the assignment itself specifies a mandatory explanation but no maximum length.
 - This PoC focuses on one payroll line. It does not model employees, payroll periods, approval workflows, identities of payroll specialists, or multiple currencies.
 - Full audit and rebuild operations cost O(number of events) in time and memory. Normal reads and state-changing operations load `payrolls` without replaying history; list queries read a page in one query. Full audit history is currently not paginated.
 - Event types and payloads are explicitly versioned; unknown schemas fail instead of guessing. Production event evolution needs migrations/upcasters and compatibility policies.

@@ -60,4 +60,40 @@ class EventSerializerTest extends TestCase
             ['occurred_at', '2026-02-30 10:00:00.000000'],
         ];
     }
+
+    /** Invalid stored adjustments must not bypass the domain rules during replay. */
+    #[DataProvider('invalidManualAdjustmentPayloads')]
+    public function test_invalid_stored_manual_adjustment_is_rejected(array $payload): void
+    {
+        $serializer = new EventSerializer;
+        $row = $serializer->serialize(event: new ManualAdjustmentApplied(
+            payrollId: 'line-1',
+            eventId: str_repeat('b', 32),
+            version: 2,
+            occurredAt: new DateTimeImmutable(datetime: '2026-01-01T00:00:00Z'),
+            amount: Money::fromDecimal(amount: '1.00'),
+            comment: 'Valid original comment',
+        ));
+        $row['payload'] = json_encode($payload, JSON_THROW_ON_ERROR);
+
+        $this->expectException(InvalidHistory::class);
+
+        $serializer->deserialize(row: (object) $row);
+    }
+
+    /** @return array<string, array{array{schema_version: int, currency: string, amount_minor: string, comment?: ?string}}> */
+    public static function invalidManualAdjustmentPayloads(): array
+    {
+        $payload = ['schema_version' => 1, 'currency' => Currency::Usd->value, 'amount_minor' => '100'];
+
+        return [
+            'zero adjustment' => [[...$payload, 'amount_minor' => '0', 'comment' => 'No change']],
+            'missing comment' => [$payload],
+            'null comment' => [[...$payload, 'comment' => null]],
+            'empty comment' => [[...$payload, 'comment' => '']],
+            'whitespace comment' => [[...$payload, 'comment' => " \t\n"]],
+            'unicode whitespace comment' => [[...$payload, 'comment' => "\u{00A0}"]],
+            'comment exceeds 2000 characters' => [[...$payload, 'comment' => str_repeat('ї', 2001)]],
+        ];
+    }
 }

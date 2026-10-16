@@ -17,6 +17,24 @@ use PHPUnit\Framework\TestCase;
 
 class PayrollLineTest extends TestCase
 {
+    public function test_comment_length_limit_counts_unicode_characters_and_rejection_preserves_state(): void
+    {
+        $line = PayrollLine::create(id: 'comment-line', amount: Money::fromDecimal(amount: '100'));
+        $comment = str_repeat('ї', 2000);
+        $line->applyAdjustment(amount: Money::fromDecimal(amount: '1'), comment: $comment);
+        $events = $line->pendingEvents();
+
+        try {
+            $line->applyAdjustment(amount: Money::fromDecimal(amount: '1'), comment: $comment.'я');
+            $this->fail('Expected a comment longer than 2000 characters to be rejected.');
+        } catch (InvalidAdjustment) {
+            $this->assertSame('101.00', $line->amount()->toDecimal());
+            $this->assertSame($events, $line->pendingEvents());
+            $this->assertCount(1, $line->adjustments());
+            $this->assertSame($comment, $line->adjustments()[0]->comment);
+        }
+    }
+
     public function test_calculation_can_change_until_the_first_adjustment(): void
     {
         $line = PayrollLine::create('line-1', Money::fromDecimal('1000'));
