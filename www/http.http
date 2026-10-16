@@ -1,0 +1,102 @@
+# Open this file in PhpStorm HTTP Client and run requests using the gutter arrows.
+# Edit variables here or edit each JSON body directly before sending a request.
+# Use a NEW payrollLineId for each full run. Keep the same ID for steps 1-10.
+# Running an adjustment twice applies it twice; there is no automatic reset.
+# Amounts must remain quoted JSON strings. Expected amounts below use the defaults.
+
+@baseUrl = http://localhost/api/v1
+@payrollLineId = manual-payroll-101
+@initialAmount = 1000.00
+@recalculatedAmount = 1050.00
+@adjustmentAmount = -45.55
+@adjustmentComment = Unpaid leave
+
+### 1. Create a payroll line — expected current amount 1000.00
+POST {{baseUrl}}/payroll-lines
+Content-Type: application/json
+Accept: application/json
+
+{
+  "id": "{{payrollLineId}}",
+  "amount": "{{initialAmount}}"
+}
+
+### 2. Recalculate before manual override — expected 1050.00
+POST {{baseUrl}}/payroll-lines/{{payrollLineId}}/recalculations
+Content-Type: application/json
+Accept: application/json
+
+{
+  "amount": "{{recalculatedAmount}}"
+}
+
+### 3. Apply an adjustment — edit the amount and comment above or directly here; expected 1004.45
+POST {{baseUrl}}/payroll-lines/{{payrollLineId}}/adjustments
+Content-Type: application/json
+Accept: application/json
+
+{
+  "amount": "{{adjustmentAmount}}",
+  "comment": "{{adjustmentComment}}"
+}
+
+### 4. Attempt recalculation after manual override — ignored; expected 1004.45
+POST {{baseUrl}}/payroll-lines/{{payrollLineId}}/recalculations
+Content-Type: application/json
+Accept: application/json
+
+{
+  "amount": "1200.00"
+}
+
+### 5. Apply a bonus — expected 1104.55
+POST {{baseUrl}}/payroll-lines/{{payrollLineId}}/adjustments
+Content-Type: application/json
+Accept: application/json
+
+{
+  "amount": "100.10",
+  "comment": "Bonus"
+}
+
+### 6. Apply correction A — expected 1104.45
+POST {{baseUrl}}/payroll-lines/{{payrollLineId}}/adjustments
+Content-Type: application/json
+Accept: application/json
+
+{
+  "amount": "-0.10",
+  "comment": "Correction A"
+}
+
+### 7. Apply correction B — expected 1104.25
+POST {{baseUrl}}/payroll-lines/{{payrollLineId}}/adjustments
+Content-Type: application/json
+Accept: application/json
+
+{
+  "amount": "-0.20",
+  "comment": "Correction B"
+}
+
+### 8. Compensate correction B — expected 1104.45
+POST {{baseUrl}}/payroll-lines/{{payrollLineId}}/adjustments
+Content-Type: application/json
+Accept: application/json
+
+{
+  "amount": "0.20",
+  "comment": "Reverse correction B"
+}
+
+### 9. Read the current amount — safe to repeat
+GET {{baseUrl}}/payroll-lines/{{payrollLineId}}
+Accept: application/json
+
+### 10. Read the full audit — expected baseline 1050.00 and five adjustments; safe to repeat
+GET {{baseUrl}}/payroll-lines/{{payrollLineId}}/adjustments
+Accept: application/json
+
+### 11. List current states — one query without reading event history
+GET {{baseUrl}}/payroll-lines?per_page=100&page=1
+Accept: application/json

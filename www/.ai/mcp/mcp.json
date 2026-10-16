@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "laravel-boost": {
+      "command": "C:/Windows/System32/cmd.exe",
+      "args": [
+        "/c",
+        "docker",
+        "compose",
+        "exec",
+        "-T",
+        "--workdir",
+        "/var/www",
+        "payroll_adjustments_cloud",
+        "php",
+        "artisan",
+        "boost:mcp"
+      ]
+    }
+  }
+}
