@@ -22,25 +22,16 @@ final readonly class Money
 
     /**
      * Parse decimal text without rounding or floating-point conversion.
-     * Build the signed cents as text before validating integer capacity; this
-     * also supports PHP_INT_MIN, whose positive magnitude cannot fit in an int.
+     * The shared parser validates decimal format and integer capacity.
      *
      * @throws InvalidArgumentException If input is inexact, malformed or out of range.
      */
     public static function fromDecimal(string $amount, Currency $currency = Currency::Usd): self
     {
-        if (preg_match('/^([+-]?)(0|[1-9][0-9]*)(?:\.([0-9]{1,2}))?$/D', $amount, $parts) !== 1) {
-            throw new InvalidArgumentException(message: 'Use a '.$currency->value.' decimal with at most two fractional digits.');
-        }
-
-        $digits = ltrim($parts[2].str_pad($parts[3] ?? '', 2, '0'), '0');
-        $minorUnits = filter_var(($parts[1] === '-' && $digits !== '' ? '-' : '').($digits === '' ? '0' : $digits), FILTER_VALIDATE_INT);
-
-        if ($minorUnits === false) {
-            throw new InvalidArgumentException(message: $currency->value.' amount exceeds the integer minor-unit range.');
-        }
-
-        return new self(minorUnits: $minorUnits, currency: $currency);
+        return new self(
+            minorUnits: MoneyAmountParser::parse(amount: $amount, currency: $currency),
+            currency: $currency,
+        );
     }
 
     /**

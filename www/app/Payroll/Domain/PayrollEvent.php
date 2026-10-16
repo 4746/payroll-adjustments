@@ -24,7 +24,7 @@ abstract readonly class PayrollEvent
         public ?string $comment = null,
     ) {
         if (! PayrollIdValidator::isValid(value: $payrollId)
-            || preg_match('/^[a-f0-9]{32}$/D', $eventId) !== 1
+            || ! PayrollEventIdValidator::isValid(value: $eventId)
             || $version < 1) {
             throw new InvalidArgumentException(message: 'Invalid event identity or version.');
         }
