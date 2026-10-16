@@ -83,6 +83,10 @@ final class PayrollLine
      */
     public function recalculate(Money $amount): void
     {
+        if ($amount->currency !== $this->amount->currency) {
+            throw new InvalidAdjustment('A payroll line cannot change currency.');
+        }
+
         if ($this->frozenSystemAmount !== null) {
             return;
         }
@@ -99,6 +103,10 @@ final class PayrollLine
      */
     public function applyAdjustment(Money $amount, string $comment): void
     {
+        if ($amount->currency !== $this->amount->currency) {
+            throw new InvalidAdjustment('An adjustment must use the payroll line currency.');
+        }
+
         $this->record(new ManualAdjustmentApplied(
             $this->id, bin2hex(random_bytes(16)), $this->version + 1,
             new DateTimeImmutable('now', new DateTimeZone('UTC')), $amount, $comment,
@@ -180,6 +188,10 @@ final class PayrollLine
     {
         if ($event->aggregateId !== $this->id || $event->version !== $this->version + 1 || isset($this->eventIds[$event->eventId])) {
             throw new InvalidHistory('Event stream identity, order or uniqueness is invalid.');
+        }
+
+        if ($this->version > 0 && $event->amount->currency !== $this->amount->currency) {
+            throw new InvalidHistory('All payroll line events must use the initial currency.');
         }
 
         if ($event instanceof PayrollLineCalculated) {

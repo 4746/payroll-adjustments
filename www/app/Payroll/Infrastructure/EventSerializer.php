@@ -33,7 +33,7 @@ final class EventSerializer
      */
     public function serialize(PayrollEvent $event): array
     {
-        $payload = ['schema_version' => 1, 'currency' => Currency::Usd->value, 'amount_minor' => (string) $event->amount->minorUnits];
+        $payload = ['schema_version' => 1, 'currency' => $event->amount->currency->value, 'amount_minor' => (string) $event->amount->minorUnits];
         if ($event instanceof ManualAdjustmentApplied) {
             $payload['comment'] = $event->comment;
         }
@@ -89,7 +89,7 @@ final class EventSerializer
 
             return new $eventClass(
                 $row->aggregate_id, $row->event_id, $version, $time,
-                Money::fromMinorUnits($minorUnits), $payload['comment'] ?? null,
+                Money::fromMinorUnits($minorUnits, Currency::from($payload['currency'])), $payload['comment'] ?? null,
             );
         } catch (JsonException|InvalidArgumentException|DomainException|TypeError $exception) {
             throw new InvalidHistory('Cannot deserialize payroll event: '.$exception->getMessage(), previous: $exception);

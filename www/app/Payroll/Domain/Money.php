@@ -8,16 +8,16 @@ use InvalidArgumentException;
 use OverflowException;
 
 /**
- * An exact USD amount in signed integer cents, independent of formatting/locale.
+ * An exact amount in a currency with two fractional digits, stored in signed minor units.
  * Arithmetic returns new values and rejects overflow rather than producing floats.
  */
 final readonly class Money
 {
-    private function __construct(public int $minorUnits) {}
+    private function __construct(public int $minorUnits, public Currency $currency) {}
 
-    public static function fromMinorUnits(int $minorUnits): self
+    public static function fromMinorUnits(int $minorUnits, Currency $currency = Currency::Usd): self
     {
-        return new self($minorUnits);
+        return new self($minorUnits, $currency);
     }
 
     /**
@@ -27,20 +27,20 @@ final readonly class Money
      *
      * @throws InvalidArgumentException If input is inexact, malformed or out of range.
      */
-    public static function fromDecimal(string $amount): self
+    public static function fromDecimal(string $amount, Currency $currency = Currency::Usd): self
     {
         if (preg_match('/^([+-]?)(0|[1-9][0-9]*)(?:\.([0-9]{1,2}))?$/D', $amount, $parts) !== 1) {
-            throw new InvalidArgumentException('Use a '.Currency::Usd->value.' decimal with at most two fractional digits.');
+            throw new InvalidArgumentException('Use a '.$currency->value.' decimal with at most two fractional digits.');
         }
 
         $digits = ltrim($parts[2].str_pad($parts[3] ?? '', 2, '0'), '0');
         $minorUnits = filter_var(($parts[1] === '-' && $digits !== '' ? '-' : '').($digits === '' ? '0' : $digits), FILTER_VALIDATE_INT);
 
         if ($minorUnits === false) {
-            throw new InvalidArgumentException(Currency::Usd->value.' amount exceeds the integer minor-unit range.');
+            throw new InvalidArgumentException($currency->value.' amount exceeds the integer minor-unit range.');
         }
 
-        return new self($minorUnits);
+        return new self($minorUnits, $currency);
     }
 
     /**
@@ -50,12 +50,14 @@ final readonly class Money
      */
     public function add(self $other): self
     {
+        $this->ensureSameCurrency($other);
+
         if (($other->minorUnits > 0 && $this->minorUnits > PHP_INT_MAX - $other->minorUnits)
             || ($other->minorUnits < 0 && $this->minorUnits < PHP_INT_MIN - $other->minorUnits)) {
             throw new OverflowException('Money addition exceeds the integer minor-unit range.');
         }
 
-        return new self($this->minorUnits + $other->minorUnits);
+        return new self($this->minorUnits + $other->minorUnits, $this->currency);
     }
 
     /**
@@ -65,12 +67,21 @@ final readonly class Money
      */
     public function subtract(self $other): self
     {
+        $this->ensureSameCurrency($other);
+
         if (($other->minorUnits > 0 && $this->minorUnits < PHP_INT_MIN + $other->minorUnits)
             || ($other->minorUnits < 0 && $this->minorUnits > PHP_INT_MAX + $other->minorUnits)) {
             throw new OverflowException('Money subtraction exceeds the integer minor-unit range.');
         }
 
-        return new self($this->minorUnits - $other->minorUnits);
+        return new self($this->minorUnits - $other->minorUnits, $this->currency);
+    }
+
+    private function ensureSameCurrency(self $other): void
+    {
+        if ($this->currency !== $other->currency) {
+            throw new InvalidAdjustment('Amounts must use the same currency.');
+        }
     }
 
     /**

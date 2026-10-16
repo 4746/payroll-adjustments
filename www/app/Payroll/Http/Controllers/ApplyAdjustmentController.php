@@ -24,7 +24,7 @@ class ApplyAdjustmentController extends Controller
 
     public function __invoke(ApplyManualAdjustmentRequest $request, string $id): JsonResponse
     {
-        $this->adjust->handle($id, $request->money(), $request->validated('comment'));
+        $this->adjust->handle($id, $request->validated('amount'), $request->validated('comment'));
 
         return new PayrollLineResource($this->history->handle($id))
             ->response()->setStatusCode(201);

@@ -24,6 +24,7 @@ class PayrollAmountRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'currency' => ['prohibited'],
             'amount' => [
                 'bail', 'required', 'string',
                 function (string $attribute, mixed $value, Closure $fail): void {

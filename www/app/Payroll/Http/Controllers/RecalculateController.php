@@ -23,7 +23,7 @@ class RecalculateController extends Controller
 
     public function __invoke(PayrollAmountRequest $request, string $id): PayrollLineResource
     {
-        $this->recalculate->handle($id, $request->money());
+        $this->recalculate->handle($id, $request->validated('amount'));
 
         return new PayrollLineResource($this->history->handle($id));
     }

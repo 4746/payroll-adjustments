@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Payroll\Domain;
 
+use App\Payroll\Domain\Currency;
+use App\Payroll\Domain\InvalidAdjustment;
 use App\Payroll\Domain\Money;
 use InvalidArgumentException;
 use OverflowException;
@@ -12,6 +14,27 @@ use PHPUnit\Framework\TestCase;
 
 class MoneyTest extends TestCase
 {
+    public function test_arithmetic_preserves_currency(): void
+    {
+        $money = Money::fromDecimal('10.00', Currency::Eur);
+        $this->assertSame(Currency::Eur, $money->add(Money::fromDecimal('2.00', Currency::Eur))->currency);
+        $this->assertSame(Currency::Eur, $money->subtract(Money::fromDecimal('2.00', Currency::Eur))->currency);
+        $this->assertSame(Currency::Uah, Money::fromMinorUnits(100, Currency::Uah)->currency);
+    }
+
+    #[DataProvider('currencyOperations')]
+    public function test_arithmetic_rejects_different_currencies(string $operation): void
+    {
+        $this->expectException(InvalidAdjustment::class);
+        Money::fromDecimal('10.00', Currency::Usd)->{$operation}(Money::fromDecimal('1.00', Currency::Eur));
+    }
+
+    /** @return list<array{string}> */
+    public static function currencyOperations(): array
+    {
+        return [['add'], ['subtract']];
+    }
+
     public function test_arithmetic_is_exact_and_values_are_immutable(): void
     {
         $money = Money::fromDecimal('0.10');

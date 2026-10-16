@@ -22,7 +22,7 @@ class CurrencyTest extends TestCase
         return [
             'known code' => ['USD', true],
             'known case' => [Currency::Usd, true],
-            'unknown code' => ['UAH', false],
+            'unknown code' => ['XYZ', false],
             'lowercase code' => ['usd', false],
             'empty code' => ['', false],
             'null' => [null, false],

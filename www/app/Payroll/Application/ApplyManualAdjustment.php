@@ -10,9 +10,10 @@ final readonly class ApplyManualAdjustment
 {
     public function __construct(private EventStore $events) {}
 
-    public function handle(string $id, Money $amount, string $comment): void
+    public function handle(string $id, Money|string $amount, string $comment): void
     {
         $line = $this->events->load($id);
+        $amount = is_string($amount) ? Money::fromDecimal($amount, $line->amount()->currency) : $amount;
         $line->applyAdjustment($amount, $comment);
         $this->events->append($line);
     }

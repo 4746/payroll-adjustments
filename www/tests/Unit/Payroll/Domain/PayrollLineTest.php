@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Payroll\Domain;
 
+use App\Payroll\Domain\Currency;
 use App\Payroll\Domain\InvalidAdjustment;
 use App\Payroll\Domain\InvalidHistory;
 use App\Payroll\Domain\ManualAdjustmentApplied;
@@ -17,6 +18,38 @@ use PHPUnit\Framework\TestCase;
 
 class PayrollLineTest extends TestCase
 {
+    #[DataProvider('currencyChanges')]
+    public function test_live_operations_reject_currency_changes(string $operation): void
+    {
+        $line = PayrollLine::create('line-1', Money::fromDecimal('100', Currency::Eur));
+        $this->expectException(InvalidAdjustment::class);
+
+        if ($operation === 'adjustment') {
+            $line->applyAdjustment(Money::fromDecimal('1', Currency::Usd), 'Wrong currency');
+        } else {
+            $line->recalculate(Money::fromDecimal('200', Currency::Usd));
+        }
+    }
+
+    #[DataProvider('currencyChanges')]
+    public function test_replay_rejects_currency_changes(string $operation): void
+    {
+        $line = PayrollLine::create('line-1', Money::fromDecimal('100', Currency::Eur));
+        $eventClass = $operation === 'adjustment' ? ManualAdjustmentApplied::class : PayrollLineCalculated::class;
+        $event = new $eventClass(
+            'line-1', str_repeat('a', 32), 2, new DateTimeImmutable('2026-01-01Z'),
+            Money::fromDecimal('1', Currency::Usd), $operation === 'adjustment' ? 'Wrong currency' : null,
+        );
+        $this->expectException(InvalidHistory::class);
+        PayrollLine::reconstitute('line-1', [...$line->pendingEvents(), $event]);
+    }
+
+    /** @return list<array{string}> */
+    public static function currencyChanges(): array
+    {
+        return [['adjustment'], ['calculation']];
+    }
+
     public function test_calculation_can_change_until_the_first_adjustment(): void
     {
         $line = PayrollLine::create('line-1', Money::fromDecimal('1000'));

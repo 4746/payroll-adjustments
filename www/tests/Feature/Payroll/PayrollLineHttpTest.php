@@ -19,6 +19,46 @@ class PayrollLineHttpTest extends TestCase
 
     private const string BASE = '/api/v1/payroll-lines';
 
+    public function test_currency_is_inherited_by_recalculations_adjustments_and_persisted_events(): void
+    {
+        $this->postJson(self::BASE, ['id' => 'euro-line', 'amount' => '1000.00', 'currency' => 'EUR'])
+            ->assertCreated()->assertJsonPath('data.currency', 'EUR');
+        $this->postJson(self::BASE.'/euro-line/recalculations', ['amount' => '1050.00'])
+            ->assertOk()->assertJsonPath('data.currency', 'EUR');
+        $this->postJson(self::BASE.'/euro-line/adjustments', ['amount' => '-45.55', 'comment' => 'Leave'])
+            ->assertCreated()->assertJsonPath('data.currency', 'EUR')->assertJsonPath('data.current_amount', '1004.45');
+        $this->postJson(self::BASE.'/euro-line/recalculations', ['amount' => '1200.00'])
+            ->assertOk()->assertJsonPath('data.current_amount', '1004.45');
+        $this->getJson(self::BASE.'/euro-line')->assertOk()
+            ->assertJsonPath('data.currency', 'EUR')->assertJsonPath('data.current_amount', '1004.45');
+        $this->getJson(self::BASE.'/euro-line/adjustments')->assertOk()
+            ->assertJsonPath('data.currency', 'EUR')->assertJsonPath('data.frozen_system_amount', '1050.00');
+
+        $payloads = DB::table('payroll_events')->where('aggregate_id', 'euro-line')->orderBy('version')->pluck('payload');
+        $this->assertCount(3, $payloads);
+        foreach ($payloads as $payload) {
+            $this->assertSame('EUR', json_decode($payload, true, 512, JSON_THROW_ON_ERROR)['currency']);
+        }
+    }
+
+    public function test_invalid_creation_currency_is_rejected_without_writing(): void
+    {
+        $this->postJson(self::BASE, ['id' => 'invalid-currency', 'amount' => '1.00', 'currency' => 'XYZ'])
+            ->assertUnprocessable()->assertJsonValidationErrors('currency');
+        $this->assertDatabaseCount('payroll_events', 0);
+    }
+
+    public function test_subsequent_requests_cannot_override_the_initial_currency(): void
+    {
+        $this->postJson(self::BASE, ['id' => 'uah-line', 'amount' => '100.00', 'currency' => 'UAH'])
+            ->assertCreated()->assertJsonPath('data.currency', 'UAH');
+        $this->postJson(self::BASE.'/uah-line/adjustments', ['amount' => '1.00', 'currency' => 'USD', 'comment' => 'Bonus'])
+            ->assertUnprocessable()->assertJsonValidationErrors('currency');
+        $this->postJson(self::BASE.'/uah-line/recalculations', ['amount' => '200.00', 'currency' => 'USD'])
+            ->assertUnprocessable()->assertJsonValidationErrors('currency');
+        $this->assertDatabaseCount('payroll_events', 1);
+    }
+
     public function test_http_scenario_persists_five_adjustments_and_reads_the_replayed_audit(): void
     {
         $this->postJson(self::BASE, ['id' => 'http-line', 'amount' => '1000.00'])
