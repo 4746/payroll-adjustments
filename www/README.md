@@ -212,6 +212,68 @@ docker compose exec -T -e DB_CONNECTION=payroll_testing payroll_adjustments_clou
 
 The final frozen baseline is **1050.00**, with exactly **five** adjustment records and **seven** total events: two calculations plus five adjustments. Every comment survives persistence and reconstruction. The final amount is **1104.45**.
 
+## Manual HTTP testing
+
+An HTTP adapter is available for local testing of the existing use cases.
+For manual requests, open [`http.http`](http.http) in PhpStorm HTTP Client.
+Change `@payrollLineId`, `@initialAmount`, `@recalculatedAmount`,
+`@adjustmentAmount` and `@adjustmentComment` at the top, or edit the JSON bodies
+directly. Run each request using its gutter arrow, in order from 1 to 10.
+Use a new ID for each full scenario; read requests can be repeated at any time.
+Amounts must remain quoted strings. The expected amounts in request titles
+describe the default example; changing inputs will change the results.
+
+The OpenAPI 3.1 specification in [`http.yaml`](http.yaml) contains request bodies,
+response schemas, error statuses and all eight scenario steps in
+`x-business-scenario`, followed by the two read requests. Use it as the API
+contract or import it into Postman/Swagger tooling.
+
+The existing Docker web server serves `http://localhost`; configure development
+MySQL and run migrations as described above before sending requests. All routes
+are under `/api/v1/payroll-lines`:
+
+| Method | Path | Input / result |
+| --- | --- | --- |
+| POST | `/api/v1/payroll-lines` | `{"id":"http-example-1","amount":"1000.00"}`; 201 audit snapshot |
+| POST | `/api/v1/payroll-lines/{id}/recalculations` | `{"amount":"1050.00"}`; 200 audit snapshot |
+| POST | `/api/v1/payroll-lines/{id}/adjustments` | `{"amount":"-45.55","comment":"Unpaid leave"}`; 201 audit snapshot |
+| GET | `/api/v1/payroll-lines/{id}` | 200 current amount |
+| GET | `/api/v1/payroll-lines/{id}/adjustments` | 200 frozen baseline and full adjustment history |
+
+Use `Content-Type: application/json` and `Accept: application/json`. Monetary
+input must be a **string**, including negative values. Responses also use decimal
+strings and wrap results in `data`. Comments retain their original whitespace.
+The first adjustment freezes the baseline; later recalculations return 200 with
+unchanged state and append no event.
+
+Use the same ID throughout a scenario and a new ID for each repetition. Existing
+IDs return 409 on creation. Successfully repeating an adjustment applies it
+again; requests have no idempotency key. Input/domain failures return 422,
+missing lines return 404, and optimistic concurrency conflicts return 409.
+There are no endpoints to edit or delete audit events.
+
+In a database client, connect to the existing MySQL service on host port `33067`,
+database `payroll_adjustments_cloud_local`, using the Compose development
+credentials. Inspect `payroll_events` using your request's ID:
+
+```sql
+SELECT aggregate_id, version, event_id, event_type, payload, occurred_at
+FROM payroll_events
+WHERE aggregate_id = 'http-example-1'
+ORDER BY version;
+```
+
+After all eight operations there are seven event rows, including five manual
+adjustments. Reads do not create rows. HTTP feature tests run separately against
+the protected `payroll_adjustments_test` schema:
+
+```bash
+docker compose exec -T payroll_adjustments_cloud php artisan test --compact tests/Feature/Payroll/PayrollLineHttpTest.php
+```
+
+This interface has no authentication and is intended for local PoC testing.
+Production exposure requires access control.
+
 ## Assumptions, limitations, and production improvements
 
 - This PoC focuses on one payroll line. It does not model employees, payroll periods, approval workflows, identities of payroll specialists, or multiple currencies.
@@ -223,4 +285,4 @@ The final frozen baseline is **1050.00**, with exactly **five** adjustment recor
 - System time is used when events are created. Stream versions establish authoritative order.
 - Immutability is enforced through the application boundary; privileged SQL access remains a limitation described above.
 - The CLI's eight operations are separate use cases, not a single transaction covering the whole demonstration. An interrupted demo can leave a valid partial stream.
-- There is no REST API, authentication, UI, queue, broker, or background projection worker.
+- The local HTTP adapter has no authentication. There is no UI, queue, broker, or background projection worker.
