@@ -23,7 +23,7 @@ class ListController extends Controller
     {
         $page = $request->safe()->integer('page', 1);
         $perPage = $request->safe()->integer('per_page', 100);
-        $lines = $this->lines->handle($page, $perPage);
+        $lines = $this->lines->handle(page: $page, perPage: $perPage);
         $hasMore = count($lines) > $perPage;
         $items = array_map(fn (PayrollLine $line): array => [
             'id' => $line->id,

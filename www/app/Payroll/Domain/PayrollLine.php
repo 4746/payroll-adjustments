@@ -40,7 +40,7 @@ final class PayrollLine
     private function __construct(public readonly string $id)
     {
         if (preg_match('/^[A-Za-z0-9_-]{1,128}$/D', $id) !== 1) {
-            throw new InvalidArgumentException('Payroll line IDs must contain 1-128 ASCII letters, digits, underscores or hyphens.');
+            throw new InvalidArgumentException(message: 'Payroll line IDs must contain 1-128 ASCII letters, digits, underscores or hyphens.');
         }
     }
 
@@ -49,8 +49,8 @@ final class PayrollLine
      */
     public static function create(string $id, Money $amount): self
     {
-        $line = new self($id);
-        $line->record($line->calculation($amount));
+        $line = new self(id: $id);
+        $line->record(event: $line->calculation(amount: $amount));
 
         return $line;
     }
@@ -66,12 +66,12 @@ final class PayrollLine
     public static function reconstitute(string $id, array $events): self
     {
         if ($events === []) {
-            throw new InvalidHistory('A payroll line must start with a calculation.');
+            throw new InvalidHistory(message: 'A payroll line must start with a calculation.');
         }
 
-        $line = new self($id);
+        $line = new self(id: $id);
         foreach ($events as $event) {
-            $line->apply($event);
+            $line->apply(event: $event);
         }
 
         return $line;
@@ -84,14 +84,14 @@ final class PayrollLine
     public function recalculate(Money $amount): void
     {
         if ($amount->currency !== $this->amount->currency) {
-            throw new InvalidAdjustment('A payroll line cannot change currency.');
+            throw new InvalidAdjustment(message: 'A payroll line cannot change currency.');
         }
 
         if ($this->frozenSystemAmount !== null) {
             return;
         }
 
-        $this->record($this->calculation($amount));
+        $this->record(event: $this->calculation(amount: $amount));
     }
 
     /**
@@ -104,14 +104,14 @@ final class PayrollLine
     public function applyAdjustment(Money $amount, string $comment): void
     {
         if ($amount->currency !== $this->amount->currency) {
-            throw new InvalidAdjustment('An adjustment must use the payroll line currency.');
+            throw new InvalidAdjustment(message: 'An adjustment must use the payroll line currency.');
         }
 
-        $this->record(new ManualAdjustmentApplied(
+        $this->record(event: new ManualAdjustmentApplied(
             payrollId: $this->id,
             eventId: bin2hex(random_bytes(16)),
             version: $this->version + 1,
-            occurredAt: new DateTimeImmutable('now', new DateTimeZone('UTC')),
+            occurredAt: new DateTimeImmutable(datetime: 'now', timezone: new DateTimeZone(timezone: 'UTC')),
             amount: $amount,
             comment: $comment,
         ));
@@ -121,10 +121,10 @@ final class PayrollLine
     public static function fromState(string $id, Money $amount, ?Money $frozenSystemAmount, int $version): self
     {
         if ($version < 1 || ($frozenSystemAmount !== null && ($version < 2 || $frozenSystemAmount->currency !== $amount->currency))) {
-            throw new InvalidHistory('Invalid persisted payroll state.');
+            throw new InvalidHistory(message: 'Invalid persisted payroll state.');
         }
 
-        $line = new self($id);
+        $line = new self(id: $id);
         $line->amount = $amount;
         $line->frozenSystemAmount = $frozenSystemAmount;
         $line->version = $version;
@@ -185,7 +185,7 @@ final class PayrollLine
             payrollId: $this->id,
             eventId: bin2hex(random_bytes(16)),
             version: $this->version + 1,
-            occurredAt: new DateTimeImmutable('now', new DateTimeZone('UTC')),
+            occurredAt: new DateTimeImmutable(datetime: 'now', timezone: new DateTimeZone(timezone: 'UTC')),
             amount: $amount,
         );
     }
@@ -196,7 +196,7 @@ final class PayrollLine
      */
     private function record(PayrollEvent $event): void
     {
-        $this->apply($event);
+        $this->apply(event: $event);
         $this->pendingEvents[] = $event;
     }
 
@@ -210,28 +210,28 @@ final class PayrollLine
     private function apply(PayrollEvent $event): void
     {
         if ($event->payrollId !== $this->id || $event->version !== $this->version + 1 || isset($this->eventIds[$event->eventId])) {
-            throw new InvalidHistory('Event stream identity, order or uniqueness is invalid.');
+            throw new InvalidHistory(message: 'Event stream identity, order or uniqueness is invalid.');
         }
 
         if ($this->version > 0 && $event->amount->currency !== $this->amount->currency) {
-            throw new InvalidHistory('All payroll line events must use the initial currency.');
+            throw new InvalidHistory(message: 'All payroll line events must use the initial currency.');
         }
 
         if ($event instanceof PayrollLineCalculated) {
             if ($this->frozenSystemAmount !== null) {
-                throw new InvalidHistory('A frozen payroll line cannot contain later calculations.');
+                throw new InvalidHistory(message: 'A frozen payroll line cannot contain later calculations.');
             }
             $this->amount = $event->amount;
         } elseif ($event instanceof ManualAdjustmentApplied) {
             if ($this->version === 0) {
-                throw new InvalidHistory('An adjustment requires an initial calculation.');
+                throw new InvalidHistory(message: 'An adjustment requires an initial calculation.');
             }
-            $newAmount = $this->amount->add($event->amount);
+            $newAmount = $this->amount->add(other: $event->amount);
             $this->frozenSystemAmount ??= $this->amount;
             $this->amount = $newAmount;
             $this->adjustments[] = $event;
         } else {
-            throw new InvalidHistory('Unknown payroll event.');
+            throw new InvalidHistory(message: 'Unknown payroll event.');
         }
 
         $this->version = $event->version;

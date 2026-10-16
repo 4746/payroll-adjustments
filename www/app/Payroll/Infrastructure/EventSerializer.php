@@ -46,10 +46,10 @@ final class EventSerializer
             'event_type' => match ($event::class) {
                 PayrollLineCalculated::class => PayrollEventType::Calculated->value,
                 ManualAdjustmentApplied::class => PayrollEventType::ManualAdjustmentApplied->value,
-                default => throw new InvalidHistory('Unknown payroll event type.'),
+                default => throw new InvalidHistory(message: 'Unknown payroll event type.'),
             },
             'payload' => json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'occurred_at' => $event->occurredAt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u'),
+            'occurred_at' => $event->occurredAt->setTimezone(new DateTimeZone(timezone: 'UTC'))->format('Y-m-d H:i:s.u'),
         ];
     }
 
@@ -60,10 +60,10 @@ final class EventSerializer
     public function deserialize(stdClass $row): PayrollEvent
     {
         try {
-            $eventClass = match (PayrollEventType::tryFrom($row->event_type)) {
+            $eventClass = match (PayrollEventType::tryFrom(value: $row->event_type)) {
                 PayrollEventType::Calculated => PayrollLineCalculated::class,
                 PayrollEventType::ManualAdjustmentApplied => ManualAdjustmentApplied::class,
-                default => throw new InvalidHistory('Unknown persisted event type.'),
+                default => throw new InvalidHistory(message: 'Unknown persisted event type.'),
             };
             $payload = json_decode($row->payload, true, 512, JSON_THROW_ON_ERROR);
             $expectedKeys = $eventClass === ManualAdjustmentApplied::class
@@ -74,26 +74,30 @@ final class EventSerializer
 
             if ($keys !== $expectedKeys
                 || $payload['schema_version'] !== 1
-                || ! Currency::isAllowed($payload['currency'])
+                || ! Currency::isAllowed(value: $payload['currency'])
                 || ! is_string($payload['amount_minor'])
                 || preg_match('/^(0|-?[1-9][0-9]*)$/D', $payload['amount_minor']) !== 1
                 || ($eventClass === ManualAdjustmentApplied::class && ! is_string($payload['comment']))) {
-                throw new InvalidHistory('Invalid payroll event payload.');
+                throw new InvalidHistory(message: 'Invalid payroll event payload.');
             }
 
             $minorUnits = filter_var($payload['amount_minor'], FILTER_VALIDATE_INT);
             $version = filter_var($row->version, FILTER_VALIDATE_INT);
-            $time = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s.u', $row->occurred_at, new DateTimeZone('UTC'));
+            $time = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s.u', $row->occurred_at, new DateTimeZone(timezone: 'UTC'));
             if ($minorUnits === false || $version === false || $time === false || $time->format('Y-m-d H:i:s.u') !== $row->occurred_at) {
-                throw new InvalidHistory('Invalid stored amount, version or timestamp.');
+                throw new InvalidHistory(message: 'Invalid stored amount, version or timestamp.');
             }
 
             return new $eventClass(
-                $row->payroll_id, $row->event_id, $version, $time,
-                Money::fromMinorUnits($minorUnits, Currency::from($payload['currency'])), $payload['comment'] ?? null,
+                payrollId: $row->payroll_id,
+                eventId: $row->event_id,
+                version: $version,
+                occurredAt: $time,
+                amount: Money::fromMinorUnits(minorUnits: $minorUnits, currency: Currency::from(value: $payload['currency'])),
+                comment: $payload['comment'] ?? null,
             );
         } catch (JsonException|InvalidArgumentException|DomainException|TypeError $exception) {
-            throw new InvalidHistory('Cannot deserialize payroll event: '.$exception->getMessage(), previous: $exception);
+            throw new InvalidHistory(message: 'Cannot deserialize payroll event: '.$exception->getMessage(), previous: $exception);
         }
     }
 }

@@ -12,6 +12,6 @@ final readonly class GetPayrollLineAmount
 
     public function handle(string $id): Money
     {
-        return $this->events->load($id)->amount();
+        return $this->events->load(id: $id)->amount();
     }
 }

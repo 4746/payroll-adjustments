@@ -13,8 +13,8 @@ final readonly class CreatePayrollLine
 
     public function handle(string $id, Money $amount): PayrollLine
     {
-        $line = PayrollLine::create($id, $amount);
-        $this->events->append($line);
+        $line = PayrollLine::create(id: $id, amount: $amount);
+        $this->events->append(line: $line);
 
         return $line;
     }

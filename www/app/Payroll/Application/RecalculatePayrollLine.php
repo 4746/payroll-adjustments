@@ -13,10 +13,10 @@ final readonly class RecalculatePayrollLine
 
     public function handle(string $id, Money|string $amount): PayrollLine
     {
-        $line = $this->events->load($id);
-        $amount = is_string($amount) ? Money::fromDecimal($amount, $line->amount()->currency) : $amount;
-        $line->recalculate($amount);
-        $this->events->append($line);
+        $line = $this->events->load(id: $id);
+        $amount = is_string($amount) ? Money::fromDecimal(amount: $amount, currency: $line->amount()->currency) : $amount;
+        $line->recalculate(amount: $amount);
+        $this->events->append(line: $line);
 
         return $line;
     }

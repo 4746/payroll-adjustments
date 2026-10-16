@@ -20,7 +20,12 @@ class PayrollLineResource extends JsonResource
     /** Write responses include only corrections created by this operation; full audit has its own endpoint. */
     public static function fromLine(PayrollLine $line): self
     {
-        return new self(new AdjustmentHistory($line->id, $line->amount(), $line->frozenSystemAmount(), $line->adjustments()));
+        return new self(resource: new AdjustmentHistory(
+            payrollLineId: $line->id,
+            currentAmount: $line->amount(),
+            frozenSystemAmount: $line->frozenSystemAmount(),
+            adjustments: $line->adjustments(),
+        ));
     }
 
     /** @return array{id: string, currency: string, current_amount: string, frozen_system_amount: ?string, adjustments: list<array{event_id: string, version: int, amount: string, comment: string, occurred_at: string}>} */
@@ -39,7 +44,7 @@ class PayrollLineResource extends JsonResource
                 'version' => $event->version,
                 'amount' => $event->amount->toDecimal(),
                 'comment' => $event->comment,
-                'occurred_at' => $event->occurredAt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\\TH:i:s.u\\Z'),
+                'occurred_at' => $event->occurredAt->setTimezone(new DateTimeZone(timezone: 'UTC'))->format('Y-m-d\\TH:i:s.u\\Z'),
             ], $history->adjustments),
         ];
     }

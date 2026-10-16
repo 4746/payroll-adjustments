@@ -21,9 +21,9 @@ class CreateController extends Controller
     public function __invoke(CreatePayrollLineRequest $request): JsonResponse
     {
         $id = $request->validated('id');
-        $line = $this->create->handle($id, $request->money());
+        $line = $this->create->handle(id: $id, amount: $request->money());
 
-        return PayrollLineResource::fromLine($line)
+        return PayrollLineResource::fromLine(line: $line)
             ->response()->setStatusCode(201);
     }
 }

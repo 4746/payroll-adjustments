@@ -88,6 +88,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - Use PHP 8 constructor property promotion: `public function __construct(public GitHub $github) { }`. Do not leave empty zero-parameter `__construct()` methods unless the constructor is private.
 - Use explicit return type declarations and type hints for all method parameters: `function isAccessible(User $user, ?string $path = null): bool`
 - Use TitleCase for Enum keys: `FavoritePerson`, `BestLake`, `Monthly`.
+- Use named arguments when instantiating classes and when calling project-owned methods or static factories. This includes exceptions, `new self`, nested constructors, and dynamic event constructors. Match the declared parameter names and put each argument on its own line in multiline calls.
 - Prefer PHPDoc blocks over inline comments. Only add inline comments for exceptionally complex logic.
 - Use array shape type definitions in PHPDoc blocks.
 

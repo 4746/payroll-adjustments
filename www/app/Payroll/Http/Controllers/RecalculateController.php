@@ -19,8 +19,8 @@ class RecalculateController extends Controller
 
     public function __invoke(PayrollAmountRequest $request, string $id): PayrollLineResource
     {
-        $line = $this->recalculate->handle($id, $request->validated('amount'));
+        $line = $this->recalculate->handle(id: $id, amount: $request->validated('amount'));
 
-        return PayrollLineResource::fromLine($line);
+        return PayrollLineResource::fromLine(line: $line);
     }
 }

@@ -18,9 +18,9 @@ class GetAmountController extends Controller
 
     public function __invoke(string $id): JsonResource
     {
-        $amount = $this->amount->handle($id);
+        $amount = $this->amount->handle(id: $id);
 
-        return new JsonResource([
+        return new JsonResource(resource: [
             'id' => $id,
             'currency' => $amount->currency->value,
             'current_amount' => $amount->toDecimal(),

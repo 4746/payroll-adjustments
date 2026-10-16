@@ -22,6 +22,9 @@ class CreatePayrollLineRequest extends PayrollAmountRequest
 
     public function money(): Money
     {
-        return Money::fromDecimal($this->validated('amount'), Currency::from($this->validated('currency', Currency::Usd->value)));
+        return Money::fromDecimal(
+            amount: $this->validated('amount'),
+            currency: Currency::from(value: $this->validated('currency', Currency::Usd->value)),
+        );
     }
 }

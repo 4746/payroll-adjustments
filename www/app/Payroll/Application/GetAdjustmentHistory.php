@@ -10,6 +10,6 @@ final readonly class GetAdjustmentHistory
 
     public function handle(string $id): AdjustmentHistory
     {
-        return $this->events->history($id);
+        return $this->events->history(id: $id);
     }
 }

@@ -15,9 +15,9 @@ final readonly class GetPayrollLines
     public function handle(int $page = 1, int $perPage = 100): array
     {
         if ($page < 1 || $page > 1000000 || $perPage < 1 || $perPage > 100) {
-            throw new InvalidArgumentException('Invalid payroll list page.');
+            throw new InvalidArgumentException(message: 'Invalid payroll list page.');
         }
 
-        return $this->events->list(($page - 1) * $perPage, $perPage + 1);
+        return $this->events->list(offset: ($page - 1) * $perPage, limit: $perPage + 1);
     }
 }

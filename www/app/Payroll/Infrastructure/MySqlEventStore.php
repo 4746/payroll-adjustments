@@ -35,24 +35,29 @@ final readonly class MySqlEventStore implements EventStore
         $row = $this->connection->table(self::STATE_TABLE)->where('id', $id)->first();
 
         if ($row === null) {
-            throw new PayrollLineNotFound("Payroll line [{$id}] was not found.");
+            throw new PayrollLineNotFound(message: "Payroll line [{$id}] was not found.");
         }
 
-        return $this->restore($row);
+        return $this->restore(row: $row);
     }
 
     public function history(string $id): AdjustmentHistory
     {
-        $line = $this->replay($id);
+        $line = $this->replay(id: $id);
 
-        return new AdjustmentHistory($id, $line->amount(), $line->frozenSystemAmount(), $line->adjustments());
+        return new AdjustmentHistory(
+            payrollLineId: $id,
+            currentAmount: $line->amount(),
+            frozenSystemAmount: $line->frozenSystemAmount(),
+            adjustments: $line->adjustments(),
+        );
     }
 
     /** @return list<PayrollLine> */
     public function list(int $offset, int $limit): array
     {
         if ($offset < 0 || $limit < 1 || $limit > 101) {
-            throw new InvalidArgumentException('Invalid payroll list bounds.');
+            throw new InvalidArgumentException(message: 'Invalid payroll list bounds.');
         }
 
         return $this->connection->table(self::STATE_TABLE)
@@ -72,7 +77,7 @@ final readonly class MySqlEventStore implements EventStore
 
         try {
             $this->connection->transaction(function () use ($line): void {
-                $state = $this->state($line);
+                $state = $this->state(line: $line);
 
                 if ($line->expectedVersion() === 0) {
                     $this->connection->table(self::STATE_TABLE)->insert(['id' => $line->id, ...$state]);
@@ -81,16 +86,16 @@ final readonly class MySqlEventStore implements EventStore
                         ->where('id', $line->id)->where('version', $line->expectedVersion())->update($state);
 
                     if ($updated !== 1) {
-                        throw new ConcurrencyConflict("Payroll line [{$line->id}] changed; reload before retrying.");
+                        throw new ConcurrencyConflict(message: "Payroll line [{$line->id}] changed; reload before retrying.");
                     }
                 }
 
                 foreach ($line->pendingEvents() as $event) {
-                    $this->connection->table(self::TABLE)->insert($this->serializer->serialize($event));
+                    $this->connection->table(self::TABLE)->insert($this->serializer->serialize(event: $event));
                 }
             });
         } catch (UniqueConstraintViolationException $exception) {
-            throw new ConcurrencyConflict("Payroll line [{$line->id}] has a conflicting state, stream version or event ID; reload before retrying.", previous: $exception);
+            throw new ConcurrencyConflict(message: "Payroll line [{$line->id}] has a conflicting state, stream version or event ID; reload before retrying.", previous: $exception);
         }
     }
 
@@ -102,9 +107,9 @@ final readonly class MySqlEventStore implements EventStore
                 ->where('id', $id)
                 ->lockForUpdate()
                 ->first();
-            $line = $this->replay($id, true);
+            $line = $this->replay(id: $id, lock: true);
             $this->connection->table(self::STATE_TABLE)
-                ->updateOrInsert(['id' => $id], $this->state($line));
+                ->updateOrInsert(['id' => $id], $this->state(line: $line));
         });
     }
 
@@ -121,20 +126,23 @@ final readonly class MySqlEventStore implements EventStore
         $rows = $query->get();
 
         if ($rows->isEmpty()) {
-            throw new PayrollLineNotFound("Payroll line [{$id}] was not found.");
+            throw new PayrollLineNotFound(message: "Payroll line [{$id}] was not found.");
         }
 
-        return PayrollLine::reconstitute($id, $rows->map($this->serializer->deserialize(...))->all());
+        return PayrollLine::reconstitute(id: $id, events: $rows->map($this->serializer->deserialize(...))->all());
     }
 
     private function restore(stdClass $row): PayrollLine
     {
-        $currency = Currency::from($row->currency);
+        $currency = Currency::from(value: $row->currency);
 
         return PayrollLine::fromState(
-            $row->id, Money::fromMinorUnits((int) $row->current_amount_minor, $currency),
-            $row->frozen_system_amount_minor === null ? null : Money::fromMinorUnits((int) $row->frozen_system_amount_minor, $currency),
-            (int) $row->version,
+            id: $row->id,
+            amount: Money::fromMinorUnits(minorUnits: (int) $row->current_amount_minor, currency: $currency),
+            frozenSystemAmount: $row->frozen_system_amount_minor === null
+                ? null
+                : Money::fromMinorUnits(minorUnits: (int) $row->frozen_system_amount_minor, currency: $currency),
+            version: (int) $row->version,
         );
     }
 
@@ -146,7 +154,7 @@ final readonly class MySqlEventStore implements EventStore
             'currency' => $line->amount()->currency->value,
             'frozen_system_amount_minor' => $line->frozenSystemAmount()?->minorUnits,
             'version' => $line->version(),
-            'updated_at' => (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u'),
+            'updated_at' => (new DateTimeImmutable(datetime: 'now', timezone: new DateTimeZone(timezone: 'UTC')))->format('Y-m-d H:i:s.u'),
         ];
     }
 }

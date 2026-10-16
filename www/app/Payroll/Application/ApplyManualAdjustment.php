@@ -13,10 +13,10 @@ final readonly class ApplyManualAdjustment
 
     public function handle(string $id, Money|string $amount, string $comment): PayrollLine
     {
-        $line = $this->events->load($id);
-        $amount = is_string($amount) ? Money::fromDecimal($amount, $line->amount()->currency) : $amount;
-        $line->applyAdjustment($amount, $comment);
-        $this->events->append($line);
+        $line = $this->events->load(id: $id);
+        $amount = is_string($amount) ? Money::fromDecimal(amount: $amount, currency: $line->amount()->currency) : $amount;
+        $line->applyAdjustment(amount: $amount, comment: $comment);
+        $this->events->append(line: $line);
 
         return $line;
     }

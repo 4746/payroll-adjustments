@@ -29,7 +29,7 @@ class PayrollAmountRequest extends FormRequest
                 'bail', 'required', 'string',
                 function (string $attribute, mixed $value, Closure $fail): void {
                     try {
-                        Money::fromDecimal($value);
+                        Money::fromDecimal(amount: $value);
                     } catch (InvalidArgumentException $exception) {
                         $fail($exception->getMessage());
                     }
@@ -40,6 +40,6 @@ class PayrollAmountRequest extends FormRequest
 
     public function money(): Money
     {
-        return Money::fromDecimal($this->validated('amount'));
+        return Money::fromDecimal(amount: $this->validated('amount'));
     }
 }

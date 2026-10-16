@@ -18,6 +18,6 @@ class GetAdjustmentHistoryController extends Controller
 
     public function __invoke(string $id): PayrollLineResource
     {
-        return new PayrollLineResource($this->history->handle($id));
+        return new PayrollLineResource(resource: $this->history->handle(id: $id));
     }
 }
