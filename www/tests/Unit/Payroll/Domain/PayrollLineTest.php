@@ -8,6 +8,7 @@ use App\Payroll\Domain\InvalidAdjustment;
 use App\Payroll\Domain\InvalidHistory;
 use App\Payroll\Domain\ManualAdjustmentApplied;
 use App\Payroll\Domain\Money;
+use App\Payroll\Domain\PayrollEvent;
 use App\Payroll\Domain\PayrollLine;
 use App\Payroll\Domain\PayrollLineCalculated;
 use DateTimeImmutable;
@@ -30,8 +31,8 @@ class PayrollLineTest extends TestCase
         } catch (InvalidAdjustment) {
             $this->assertSame('101.00', $line->amount()->toDecimal());
             $this->assertSame($events, $line->pendingEvents());
-            $this->assertCount(1, $line->adjustments());
-            $this->assertSame($comment, $line->adjustments()[0]->comment);
+            $this->assertInstanceOf(ManualAdjustmentApplied::class, $events[1]);
+            $this->assertSame($comment, $events[1]->comment);
         }
     }
 
@@ -61,15 +62,16 @@ class PayrollLineTest extends TestCase
         }
         $events = $line->pendingEvents();
         $reloaded = PayrollLine::reconstitute('line-1', $events);
+        $adjustments = array_values(array_filter($events, fn (PayrollEvent $event): bool => $event instanceof ManualAdjustmentApplied));
         $this->assertSame('1104.45', $reloaded->amount()->toDecimal());
         $this->assertSame('1050.00', $reloaded->frozenSystemAmount()->toDecimal());
-        $this->assertSame(['-45.55', '100.10', '-0.10', '-0.20', '0.20'], array_map(fn (ManualAdjustmentApplied $event): string => $event->amount->toDecimal(), $reloaded->adjustments()));
-        $this->assertSame(['Unpaid leave', 'Bonus', 'Correction A', 'Correction B', 'Reverse correction B'], array_map(fn (ManualAdjustmentApplied $event): string => $event->comment, $reloaded->adjustments()));
-        $this->assertSame([3, 4, 5, 6, 7], array_column($reloaded->adjustments(), 'version'));
-        $this->assertCount(5, $reloaded->adjustments());
+        $this->assertSame(['-45.55', '100.10', '-0.10', '-0.20', '0.20'], array_map(fn (ManualAdjustmentApplied $event): string => $event->amount->toDecimal(), $adjustments));
+        $this->assertSame(['Unpaid leave', 'Bonus', 'Correction A', 'Correction B', 'Reverse correction B'], array_map(fn (ManualAdjustmentApplied $event): string => $event->comment, $adjustments));
+        $this->assertSame([3, 4, 5, 6, 7], array_column($adjustments, 'version'));
+        $this->assertCount(5, $adjustments);
         $this->assertCount(7, array_unique(array_column($events, 'eventId')));
         $this->assertSame([], $reloaded->pendingEvents());
-        $this->assertSame($events[2]->occurredAt, $reloaded->adjustments()[0]->occurredAt);
+        $this->assertSame($events[2]->occurredAt, $adjustments[0]->occurredAt);
     }
 
     public function test_compensation_never_reenables_automatic_calculations(): void
@@ -82,7 +84,7 @@ class PayrollLineTest extends TestCase
         $this->assertSame('1000.00', $line->amount()->toDecimal());
         $this->assertSame('1000.00', $line->frozenSystemAmount()->toDecimal());
         $this->assertSame([], $line->pendingEvents());
-        $this->assertCount(2, $line->adjustments());
+        $this->assertSame(3, $line->version());
     }
 
     #[DataProvider('rejectedAdjustments')]
@@ -96,7 +98,7 @@ class PayrollLineTest extends TestCase
             $this->assertSame('1000.00', $line->amount()->toDecimal());
             $this->assertNull($line->frozenSystemAmount());
             $this->assertCount(1, $line->pendingEvents());
-            $this->assertSame([], $line->adjustments());
+            $this->assertSame([], array_filter($line->pendingEvents(), fn (PayrollEvent $event): bool => $event instanceof ManualAdjustmentApplied));
         }
     }
 

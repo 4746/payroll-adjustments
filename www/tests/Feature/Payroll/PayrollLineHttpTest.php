@@ -8,6 +8,7 @@ use App\Payroll\Application\ConcurrencyConflict;
 use App\Payroll\Application\PayrollRepository;
 use App\Payroll\Domain\Money;
 use App\Payroll\Domain\PayrollLine;
+use App\Payroll\Http\Resources\PayrollLineResource;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -18,6 +19,23 @@ class PayrollLineHttpTest extends TestCase
     use LazilyRefreshDatabase;
 
     private const string BASE = '/api/v1/payroll-lines';
+
+    public function test_write_resource_returns_only_new_adjustments_after_replaying_history(): void
+    {
+        $line = PayrollLine::create(id: 'replayed-line', amount: Money::fromDecimal(amount: '100'));
+        $line->applyAdjustment(amount: Money::fromDecimal(amount: '1'), comment: 'Historical correction');
+        $line = PayrollLine::reconstitute(id: 'replayed-line', events: $line->pendingEvents());
+        $this->assertSame([], $line->pendingEvents());
+        $line->applyAdjustment(amount: Money::fromDecimal(amount: '2'), comment: 'New correction');
+
+        $response = PayrollLineResource::fromLine(line: $line)->toArray(request: $this->app['request']);
+
+        $this->assertSame('103.00', $response['current_amount']);
+        $this->assertSame('100.00', $response['frozen_system_amount']);
+        $this->assertCount(1, $response['adjustments']);
+        $this->assertSame('New correction', $response['adjustments'][0]['comment']);
+        $this->assertSame('2.00', $response['adjustments'][0]['amount']);
+    }
 
     public function test_comment_limit_accepts_2000_unicode_characters_and_returns_422_above_it(): void
     {

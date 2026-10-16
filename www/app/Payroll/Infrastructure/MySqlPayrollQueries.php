@@ -7,7 +7,9 @@ namespace App\Payroll\Infrastructure;
 use App\Payroll\Application\AdjustmentHistory;
 use App\Payroll\Application\PayrollLineNotFound;
 use App\Payroll\Application\PayrollQueries;
+use App\Payroll\Domain\ManualAdjustmentApplied;
 use App\Payroll\Domain\Money;
+use App\Payroll\Domain\PayrollEvent;
 use App\Payroll\Domain\PayrollLine;
 use Illuminate\Database\Connection;
 use InvalidArgumentException;
@@ -46,13 +48,14 @@ final readonly class MySqlPayrollQueries implements PayrollQueries
 
     public function history(string $id): AdjustmentHistory
     {
-        $line = $this->stream->replay(id: $id);
+        $events = $this->stream->read(id: $id);
+        $line = PayrollLine::reconstitute(id: $id, events: $events);
 
         return new AdjustmentHistory(
             payrollLineId: $id,
             currentAmount: $line->amount(),
             frozenSystemAmount: $line->frozenSystemAmount(),
-            adjustments: $line->adjustments(),
+            adjustments: array_values(array_filter($events, fn (PayrollEvent $event): bool => $event instanceof ManualAdjustmentApplied)),
         );
     }
 }

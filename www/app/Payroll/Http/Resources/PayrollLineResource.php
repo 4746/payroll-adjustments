@@ -6,13 +6,14 @@ namespace App\Payroll\Http\Resources;
 
 use App\Payroll\Application\AdjustmentHistory;
 use App\Payroll\Domain\ManualAdjustmentApplied;
+use App\Payroll\Domain\PayrollEvent;
 use App\Payroll\Domain\PayrollLine;
 use DateTimeZone;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * Present a replayed audit snapshot without exposing persistence payloads.
+ * Present a full audit or an operation result without exposing persistence payloads.
  * Money stays decimal text and event timestamps are explicitly UTC.
  */
 class PayrollLineResource extends JsonResource
@@ -24,7 +25,7 @@ class PayrollLineResource extends JsonResource
             payrollLineId: $line->id,
             currentAmount: $line->amount(),
             frozenSystemAmount: $line->frozenSystemAmount(),
-            adjustments: $line->adjustments(),
+            adjustments: array_values(array_filter($line->pendingEvents(), fn (PayrollEvent $event): bool => $event instanceof ManualAdjustmentApplied)),
         ));
     }
 

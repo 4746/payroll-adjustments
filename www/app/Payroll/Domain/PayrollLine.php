@@ -28,9 +28,6 @@ final class PayrollLine
 
     private int $version = 0;
 
-    /** @var list<ManualAdjustmentApplied> */
-    private array $adjustments = [];
-
     /** @var list<PayrollEvent> */
     private array $pendingEvents = [];
 
@@ -157,17 +154,6 @@ final class PayrollLine
     }
 
     /**
-     * Adjustment facts observed during replay or this unit of work.
-     * State-only loads do not include historical adjustments; query audit separately.
-     *
-     * @return list<ManualAdjustmentApplied>
-     */
-    public function adjustments(): array
-    {
-        return $this->adjustments;
-    }
-
-    /**
      * New facts to append atomically, never events restored through replay.
      * Append this unit of work once, then reload before the next operation.
      * The buffer is retained so a failed write can be retried without losing work.
@@ -229,7 +215,6 @@ final class PayrollLine
             $newAmount = $this->amount->add(other: $event->amount);
             $this->frozenSystemAmount ??= $this->amount;
             $this->amount = $newAmount;
-            $this->adjustments[] = $event;
         } else {
             throw new InvalidHistory(message: 'Unknown payroll event.');
         }

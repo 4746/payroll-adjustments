@@ -35,7 +35,7 @@ Migrations are in [`database/migrations`](database/migrations). The logical rela
 
 Normal reads and changes load current state, and lists use one query without event history. A transaction updates state only if its version matches the loaded version, then inserts pending events. Any failure rolls both back; competing writes return a conflict. Reload before the next operation; there is no automatic command retry.
 
-Audit and rebuild replay events in version order, validating identities, transitions and payloads. Event types are `calculated.v1` and `manual_adjustment_applied.v1`; unknown formats fail. Each adjustment retains its ID, version, UTC timestamp, amount and comment.
+The aggregate exposes current state and pending events, not an adjustment-history list. Full audit is obtained only through `PayrollQueries::history()`; write responses select new adjustments from pending events. Audit and rebuild replay events in version order, validating identities, transitions and payloads. Event types are `calculated.v1` and `manual_adjustment_applied.v1`; unknown formats fail. Each adjustment retains its ID, version, UTC timestamp, amount and comment.
 
 ### Money
 

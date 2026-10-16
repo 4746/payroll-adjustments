@@ -151,8 +151,8 @@ class MySqlPayrollRepositoryTest extends TestCase
         $this->assertSame([1, 2, 3], DB::table('payroll_events')->orderBy('version')->pluck('version')->all());
         $adjustment = $this->app->make(PayrollQueries::class)->history(id: 'line-1')->adjustments[0];
         $this->assertSame('Unpaid leave', $adjustment->comment);
-        $this->assertSame($line->adjustments()[0]->eventId, $adjustment->eventId);
-        $this->assertSame($line->adjustments()[0]->occurredAt->format('U.u'), $adjustment->occurredAt->format('U.u'));
+        $this->assertSame($line->pendingEvents()[2]->eventId, $adjustment->eventId);
+        $this->assertSame($line->pendingEvents()[2]->occurredAt->format('U.u'), $adjustment->occurredAt->format('U.u'));
         $this->assertDatabaseCount('payroll_events', 3);
     }
 
@@ -263,7 +263,7 @@ class MySqlPayrollRepositoryTest extends TestCase
             $this->assertDatabaseCount('payroll_events', 1);
             $this->assertSame('1000.00', $store->load('line-1')->amount()->toDecimal());
             $this->assertDatabaseHas('payrolls', ['id' => 'line-1', 'version' => 1, 'current_amount_minor' => 100000, 'frozen_system_amount_minor' => null]);
-            $this->assertSame([], $store->load('line-1')->adjustments());
+            $this->assertSame([], $store->load(id: 'line-1')->pendingEvents());
         }
         $store->append($line);
         $this->assertDatabaseCount('payroll_events', 3);
