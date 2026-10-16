@@ -1,0 +1,478 @@
+openapi: 3.1.0
+info:
+  title: 'Alcor Payroll Adjustments — Manual HTTP Testing'
+  version: 1.0.0
+  description: |-
+    Local manual testing through editable OpenAPI parameter fields.
+    Each operation declares its own fields with demo defaults: id, amount and comment where applicable.
+    POST operations send these fields as query parameters; no JSON editing is required.
+    For routes containing {id}, edit the operation's id path field before sending.
+    The server also continues to accept existing JSON requests.
+
+    Run the eight writes in x-business-scenario in order, then the two reads.
+    Keep the same id across operations and choose a new id for another full run.
+    Repeating an adjustment applies it again; commands are not idempotent.
+    The final result with demo inputs is 1104.45, baseline 1050.00, and five adjustments.
+    Inspect payroll_events in payroll_adjustments_cloud_local, filtered by aggregate_id and ordered by version.
+    The ignored recalculation adds no event. This interface has no authentication and is for local PoC testing.
+servers:
+  -
+    url: 'http://localhost/api/v1'
+    description: 'Existing Docker web server'
+security: []
+tags:
+  -
+    name: 'Payroll lines'
+    description: 'Create, recalculate, adjust and read one payroll line.'
+x-business-scenario:
+  -
+    step: 1
+    method: POST
+    path: /payroll-lines
+    expected_status: 201
+    expected_current_amount: '1000.00'
+    query:
+      id: http-example-1
+      amount: '1000.00'
+  -
+    step: 2
+    method: POST
+    path: /payroll-lines/http-example-1/recalculations
+    expected_status: 200
+    expected_current_amount: '1050.00'
+    query:
+      amount: '1050.00'
+  -
+    step: 3
+    method: POST
+    path: /payroll-lines/http-example-1/adjustments
+    expected_status: 201
+    expected_current_amount: '1004.45'
+    query:
+      amount: '-45.55'
+      comment: 'Unpaid leave'
+  -
+    step: 4
+    method: POST
+    path: /payroll-lines/http-example-1/recalculations
+    expected_status: 200
+    expected_current_amount: '1004.45'
+    note: 'Ignored; no event is appended.'
+    query:
+      amount: '1200.00'
+  -
+    step: 5
+    method: POST
+    path: /payroll-lines/http-example-1/adjustments
+    expected_status: 201
+    expected_current_amount: '1104.55'
+    query:
+      amount: '100.10'
+      comment: Bonus
+  -
+    step: 6
+    method: POST
+    path: /payroll-lines/http-example-1/adjustments
+    expected_status: 201
+    expected_current_amount: '1104.45'
+    query:
+      amount: '-0.10'
+      comment: 'Correction A'
+  -
+    step: 7
+    method: POST
+    path: /payroll-lines/http-example-1/adjustments
+    expected_status: 201
+    expected_current_amount: '1104.25'
+    query:
+      amount: '-0.20'
+      comment: 'Correction B'
+  -
+    step: 8
+    method: POST
+    path: /payroll-lines/http-example-1/adjustments
+    expected_status: 201
+    expected_current_amount: '1104.45'
+    query:
+      amount: '0.20'
+      comment: 'Reverse correction B'
+  -
+    step: 9
+    method: GET
+    path: /payroll-lines/http-example-1
+    expected_status: 200
+    expected_current_amount: '1104.45'
+  -
+    step: 10
+    method: GET
+    path: /payroll-lines/http-example-1/adjustments
+    expected_status: 200
+    expected_frozen_system_amount: '1050.00'
+    expected_adjustment_count: 5
+    expected_event_rows: 7
+paths:
+  /payroll-lines:
+    post:
+      tags:
+        - 'Payroll lines'
+      operationId: createPayrollLine
+      summary: 'Create a payroll line (step 1)'
+      responses:
+        201:
+          description: 'Current replayed payroll state, frozen baseline and complete adjustment history.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditResponse'
+        409:
+          description: 'Concurrent write or duplicate creation. Reload before deciding whether to retry.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        422:
+          description: 'Invalid input, rejected adjustment or arithmetic overflow.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+        -
+          name: id
+          in: query
+          required: true
+          description: 'Enter a NEW payroll line ID. Duplicate creation returns 409.'
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{1,128}$'
+            example: http-example-1
+            default: http-example-1
+          example: http-example-1
+        -
+          name: amount
+          in: query
+          required: true
+          description: 'Enter the amount in USD, e.g. 1000.00. For the ignored recalculation step enter 1200.00.'
+          schema:
+            type: string
+            pattern: '^[+-]?(0|[1-9][0-9]*)(\.[0-9]{1,2})?$'
+            description: 'Exact USD decimal text with at most two fractional digits. Sent as a query string; never rounded. Signed 64-bit cents range.'
+            example: '1000.00'
+            default: '1000.00'
+          example: '1000.00'
+  '/payroll-lines/{id}':
+    get:
+      tags:
+        - 'Payroll lines'
+      operationId: getPayrollLineAmount
+      summary: 'Read the current amount by event replay'
+      responses:
+        200:
+          description: 'Current amount.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AmountResponse'
+        404:
+          description: 'Payroll line does not exist.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          description: 'Enter the payroll line ID to read or change. Use the same ID as creation.'
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{1,128}$'
+            example: http-example-1
+            default: http-example-1
+          example: http-example-1
+  '/payroll-lines/{id}/recalculations':
+    post:
+      tags:
+        - 'Payroll lines'
+      operationId: recalculatePayrollLine
+      summary: 'Recalculate automatically (steps 2 and 4)'
+      description: 'Updates the system amount only before the first adjustment. After that, returns 200 with unchanged state and no new event. Frozen status remains permanent even after compensation.'
+      responses:
+        200:
+          description: 'Current replayed payroll state, frozen baseline and complete adjustment history.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditResponse'
+        404:
+          description: 'Payroll line does not exist.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        409:
+          description: 'Concurrent write or duplicate creation. Reload before deciding whether to retry.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        422:
+          description: 'Invalid input, rejected adjustment or arithmetic overflow.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          description: 'Enter the payroll line ID to read or change. Use the same ID as creation.'
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{1,128}$'
+            example: http-example-1
+            default: http-example-1
+          example: http-example-1
+        -
+          name: amount
+          in: query
+          required: true
+          description: 'Enter the amount in USD, e.g. 1050.00. For the ignored recalculation step enter 1200.00.'
+          schema:
+            type: string
+            pattern: '^[+-]?(0|[1-9][0-9]*)(\.[0-9]{1,2})?$'
+            description: 'Exact USD decimal text with at most two fractional digits. Sent as a query string; never rounded. Signed 64-bit cents range.'
+            example: '1050.00'
+            default: '1050.00'
+          example: '1050.00'
+  '/payroll-lines/{id}/adjustments':
+    post:
+      tags:
+        - 'Payroll lines'
+      operationId: applyManualAdjustment
+      summary: 'Append an immutable signed adjustment (steps 3, 5–8)'
+      description: 'A non-zero delta and a non-blank UTF-8 comment are mandatory. Comments retain whitespace. Correct mistakes by appending a compensating delta.'
+      responses:
+        201:
+          description: 'Current replayed payroll state, frozen baseline and complete adjustment history.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditResponse'
+        404:
+          description: 'Payroll line does not exist.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        409:
+          description: 'Concurrent write or duplicate creation. Reload before deciding whether to retry.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        422:
+          description: 'Invalid input, rejected adjustment or arithmetic overflow.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          description: 'Enter the payroll line ID to read or change. Use the same ID as creation.'
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{1,128}$'
+            example: http-example-1
+            default: http-example-1
+          example: http-example-1
+        -
+          name: amount
+          in: query
+          required: true
+          description: 'Enter the amount in USD, e.g. -45.55. For the ignored recalculation step enter 1200.00.'
+          schema:
+            type: string
+            pattern: '^[+-]?(0|[1-9][0-9]*)(\.[0-9]{1,2})?$'
+            description: 'Exact USD decimal text with at most two fractional digits. Sent as a query string; never rounded. Signed 64-bit cents range.'
+            example: '-45.55'
+            default: '-45.55'
+          example: '-45.55'
+        -
+          name: comment
+          in: query
+          required: true
+          description: 'Enter the explanation for this adjustment. Required; whitespace-only comments are rejected.'
+          schema:
+            type: string
+            pattern: \S
+            default: 'Unpaid leave'
+            example: 'Unpaid leave'
+          example: 'Unpaid leave'
+    get:
+      tags:
+        - 'Payroll lines'
+      operationId: getAdjustmentHistory
+      summary: 'Read the frozen baseline and complete audit history'
+      responses:
+        200:
+          description: 'Current replayed payroll state, frozen baseline and complete adjustment history.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditResponse'
+              example:
+                data:
+                  id: http-example-1
+                  currency: USD
+                  current_amount: '1104.45'
+                  frozen_system_amount: '1050.00'
+                  adjustments:
+                    -
+                      event_id: '11111111111111111111111111111111'
+                      version: 3
+                      amount: '-45.55'
+                      comment: 'Unpaid leave'
+                      occurred_at: '2026-10-16T10:00:00.000000Z'
+                    -
+                      event_id: '22222222222222222222222222222222'
+                      version: 4
+                      amount: '100.10'
+                      comment: Bonus
+                      occurred_at: '2026-10-16T10:00:01.000000Z'
+                    -
+                      event_id: '33333333333333333333333333333333'
+                      version: 5
+                      amount: '-0.10'
+                      comment: 'Correction A'
+                      occurred_at: '2026-10-16T10:00:02.000000Z'
+                    -
+                      event_id: '44444444444444444444444444444444'
+                      version: 6
+                      amount: '-0.20'
+                      comment: 'Correction B'
+                      occurred_at: '2026-10-16T10:00:03.000000Z'
+                    -
+                      event_id: '55555555555555555555555555555555'
+                      version: 7
+                      amount: '0.20'
+                      comment: 'Reverse correction B'
+                      occurred_at: '2026-10-16T10:00:04.000000Z'
+        404:
+          description: 'Payroll line does not exist.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          description: 'Enter the payroll line ID to read or change. Use the same ID as creation.'
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{1,128}$'
+            example: http-example-1
+            default: http-example-1
+          example: http-example-1
+components:
+  schemas:
+    AmountResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - id
+            - currency
+            - current_amount
+          properties:
+            id:
+              type: string
+            currency:
+              type: string
+              const: USD
+            current_amount:
+              type: string
+              example: '1104.45'
+    AuditResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/Audit'
+    Audit:
+      type: object
+      required:
+        - id
+        - currency
+        - current_amount
+        - frozen_system_amount
+        - adjustments
+      properties:
+        id:
+          type: string
+        currency:
+          type: string
+          const: USD
+        current_amount:
+          type: string
+          example: '1104.45'
+        frozen_system_amount:
+          type:
+            - string
+            - 'null'
+          description: 'Null until the first accepted adjustment, then permanently frozen.'
+          example: '1050.00'
+        adjustments:
+          type: array
+          description: 'Ordered by stream version, including each original comment.'
+          items:
+            $ref: '#/components/schemas/Adjustment'
+    Adjustment:
+      type: object
+      required:
+        - event_id
+        - version
+        - amount
+        - comment
+        - occurred_at
+      properties:
+        event_id:
+          type: string
+          pattern: '^[a-f0-9]{32}$'
+        version:
+          type: integer
+          minimum: 1
+        amount:
+          type: string
+          example: '-45.55'
+        comment:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+          description: 'UTC timestamp with six fractional digits.'
+    Error:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+        errors:
+          type: object
+          description: 'Present for Form Request validation failures.'
+          additionalProperties:
+            type: array
+            items:
+              type: string

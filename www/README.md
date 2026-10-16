@@ -215,18 +215,16 @@ The final frozen baseline is **1050.00**, with exactly **five** adjustment recor
 ## Manual HTTP testing
 
 An HTTP adapter is available for local testing of the existing use cases.
-For manual requests, open [`http.http`](http.http) in PhpStorm HTTP Client.
-Change `@payrollLineId`, `@initialAmount`, `@recalculatedAmount`,
-`@adjustmentAmount` and `@adjustmentComment` at the top, or edit the JSON bodies
-directly. Run each request using its gutter arrow, in order from 1 to 10.
-Use a new ID for each full scenario; read requests can be repeated at any time.
-Amounts must remain quoted strings. The expected amounts in request titles
-describe the default example; changing inputs will change the results.
+Open [`http.yaml`](http.yaml) in an OpenAPI request interface. Each operation
+declares editable parameter fields with demo defaults: creation has `id` and
+`amount`; recalculation has a path `id` and `amount`; adjustment has a path `id`,
+`amount` and `comment`. Both read operations expose their own path `id` field.
+Change the field values before sending; no JSON body editing is required.
+POST examples send input as query parameters. Existing JSON clients remain
+supported. Use a new ID for each full scenario and the same ID for all its steps.
 
-The OpenAPI 3.1 specification in [`http.yaml`](http.yaml) contains request bodies,
-response schemas, error statuses and all eight scenario steps in
-`x-business-scenario`, followed by the two read requests. Use it as the API
-contract or import it into Postman/Swagger tooling.
+The specification also contains response schemas, error statuses and all eight
+scenario writes in `x-business-scenario`, followed by the two read requests.
 
 The existing Docker web server serves `http://localhost`; configure development
 MySQL and run migrations as described above before sending requests. All routes
@@ -240,9 +238,11 @@ are under `/api/v1/payroll-lines`:
 | GET | `/api/v1/payroll-lines/{id}` | 200 current amount |
 | GET | `/api/v1/payroll-lines/{id}/adjustments` | 200 frozen baseline and full adjustment history |
 
-Use `Content-Type: application/json` and `Accept: application/json`. Monetary
-input must be a **string**, including negative values. Responses also use decimal
-strings and wrap results in `data`. Comments retain their original whitespace.
+Use `Accept: application/json`. The OpenAPI form sends the fields above as query
+parameters. JSON clients can send the same fields in a body with
+`Content-Type: application/json`; monetary JSON values must be **strings**,
+including negative values. Responses also use decimal strings and wrap results
+in `data`. Comments retain their original whitespace.
 The first adjustment freezes the baseline; later recalculations return 200 with
 unchanged state and append no event.
 
