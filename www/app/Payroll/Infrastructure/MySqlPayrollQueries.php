@@ -42,7 +42,10 @@ final readonly class MySqlPayrollQueries implements PayrollQueries
         }
 
         return $this->connection->table('payrolls')
-            ->orderBy('id')->offset($offset)->limit($limit)->get()
+            ->orderBy('id')
+            ->offset($offset)
+            ->limit($limit)
+            ->get()
             ->map($this->states->restore(...))->all();
     }
 

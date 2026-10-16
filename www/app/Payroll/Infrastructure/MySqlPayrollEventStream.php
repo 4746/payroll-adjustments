@@ -22,7 +22,9 @@ final readonly class MySqlPayrollEventStream
     /** @return list<PayrollEvent> Ordered facts; callers replay them to validate stream transitions. */
     public function read(string $id, bool $lock = false): array
     {
-        $query = $this->connection->table('payroll_events')->where('payroll_id', $id)->orderBy('version');
+        $query = $this->connection->table('payroll_events')
+            ->where('payroll_id', $id)
+            ->orderBy('version');
 
         if ($lock) {
             $query->lockForUpdate();

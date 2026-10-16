@@ -29,7 +29,9 @@ final readonly class MySqlPayrollRepository implements PayrollRepository
 
     public function load(string $id): PayrollLine
     {
-        $row = $this->connection->table(self::STATE_TABLE)->where('id', $id)->first();
+        $row = $this->connection->table(self::STATE_TABLE)
+            ->where('id', $id)
+            ->first();
 
         if ($row === null) {
             throw new PayrollLineNotFound(message: "Payroll line [{$id}] was not found.");
@@ -49,10 +51,13 @@ final readonly class MySqlPayrollRepository implements PayrollRepository
                 $state = $this->states->serialize(line: $line);
 
                 if ($line->expectedVersion() === 0) {
-                    $this->connection->table(self::STATE_TABLE)->insert(['id' => $line->id, ...$state]);
+                    $this->connection->table(self::STATE_TABLE)
+                        ->insert(['id' => $line->id, ...$state]);
                 } else {
                     $updated = $this->connection->table(self::STATE_TABLE)
-                        ->where('id', $line->id)->where('version', $line->expectedVersion())->update($state);
+                        ->where('id', $line->id)
+                        ->where('version', $line->expectedVersion())
+                        ->update($state);
 
                     if ($updated !== 1) {
                         throw new ConcurrencyConflict(message: "Payroll line [{$line->id}] changed; reload before retrying.");
@@ -60,7 +65,8 @@ final readonly class MySqlPayrollRepository implements PayrollRepository
                 }
 
                 foreach ($line->pendingEvents() as $event) {
-                    $this->connection->table(self::TABLE)->insert($this->serializer->serialize(event: $event));
+                    $this->connection->table(self::TABLE)
+                        ->insert($this->serializer->serialize(event: $event));
                 }
             });
         } catch (UniqueConstraintViolationException $exception) {

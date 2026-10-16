@@ -53,7 +53,7 @@ docker compose up -d
 docker compose exec -T payroll_adjustments_cloud composer install
 ```
 
-Copy [`.env.example`](.env.example) to `.env` if it does not exist; the project's Composer setup/create-project scripts also copy it when missing. Local MySQL connection details are already in the template. Set `DB_CONNECTION=mysql` in `.env`: that setting is currently commented out in the template, and the application otherwise defaults to SQLite. Preserve an existing application key; for a new environment, generate one with `php artisan key:generate`. Then apply migrations:
+Copy [`.env.example`](.env.example) to `.env` if it does not exist; the project's Composer setup/create-project scripts also copy it when missing. The template already selects MySQL and includes local connection details. Preserve an existing application key; for a new environment, generate one with `php artisan key:generate`. Then apply migrations:
 
 ```bash
 docker compose exec -T payroll_adjustments_cloud php artisan config:clear --no-interaction
