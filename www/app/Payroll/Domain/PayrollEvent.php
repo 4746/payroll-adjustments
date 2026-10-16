@@ -10,8 +10,7 @@ use InvalidArgumentException;
 /**
  * Immutable payroll fact with identity, stream order and occurrence time.
  * Version determines application order; timestamps are traceability metadata.
- * Validation also runs during deserialization so replay cannot bypass the
- * non-zero adjustment and mandatory comment policies.
+ * Each event validates its payload during construction, including deserialization.
  */
 abstract readonly class PayrollEvent
 {
@@ -29,16 +28,9 @@ abstract readonly class PayrollEvent
             throw new InvalidArgumentException(message: 'Invalid event identity or version.');
         }
 
-        if ($this instanceof ManualAdjustmentApplied) {
-            if ($amount->minorUnits === 0 || $comment === null || preg_match('/\\S/u', $comment) !== 1) {
-                throw new InvalidAdjustment(message: 'A non-zero adjustment and non-blank UTF-8 comment are required.');
-            }
-
-            if (mb_strlen($comment, 'UTF-8') > ManualAdjustmentApplied::MAX_COMMENT_LENGTH) {
-                throw new InvalidAdjustment(message: 'Adjustment comments must not exceed '.ManualAdjustmentApplied::MAX_COMMENT_LENGTH.' characters.');
-            }
-        } elseif ($comment !== null) {
-            throw new InvalidArgumentException(message: 'Calculation events cannot contain adjustment comments.');
-        }
+        $this->validatePayload();
     }
+
+    /** Enforce the concrete event's rules after its promoted properties are initialized. */
+    abstract protected function validatePayload(): void;
 }
