@@ -6,7 +6,6 @@ namespace App\Payroll\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Payroll\Application\ApplyManualAdjustment;
-use App\Payroll\Application\GetAdjustmentHistory;
 use App\Payroll\Http\Requests\ApplyManualAdjustmentRequest;
 use App\Payroll\Http\Resources\PayrollLineResource;
 use Illuminate\Http\JsonResponse;
@@ -17,16 +16,13 @@ use Illuminate\Http\JsonResponse;
  */
 class ApplyAdjustmentController extends Controller
 {
-    public function __construct(
-        private readonly ApplyManualAdjustment $adjust,
-        private readonly GetAdjustmentHistory $history,
-    ) {}
+    public function __construct(private readonly ApplyManualAdjustment $adjust) {}
 
     public function __invoke(ApplyManualAdjustmentRequest $request, string $id): JsonResponse
     {
-        $this->adjust->handle($id, $request->validated('amount'), $request->validated('comment'));
+        $line = $this->adjust->handle($id, $request->validated('amount'), $request->validated('comment'));
 
-        return new PayrollLineResource($this->history->handle($id))
+        return PayrollLineResource::fromLine($line)
             ->response()->setStatusCode(201);
     }
 }

@@ -96,3 +96,7 @@ Accept: application/json
 ### 10. Read the full audit — expected baseline 1050.00 and five adjustments; safe to repeat
 GET {{baseUrl}}/payroll-lines/{{payrollLineId}}/adjustments
 Accept: application/json
+
+### 11. List current states — one query without reading event history
+GET {{baseUrl}}/payroll-lines?per_page=100&page=1
+Accept: application/json

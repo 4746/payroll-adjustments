@@ -21,7 +21,11 @@ class PayrollLineTest extends TestCase
     #[DataProvider('currencyChanges')]
     public function test_live_operations_reject_currency_changes(string $operation): void
     {
-        $line = PayrollLine::create('line-1', Money::fromDecimal('100', Currency::Eur));
+        if (count(Currency::cases()) < 2) {
+            $this->markTestSkipped('Requires at least two enabled currencies.');
+        }
+
+        $line = PayrollLine::create('line-1', Money::fromDecimal('100', Currency::cases()[1]));
         $this->expectException(InvalidAdjustment::class);
 
         if ($operation === 'adjustment') {
@@ -34,7 +38,11 @@ class PayrollLineTest extends TestCase
     #[DataProvider('currencyChanges')]
     public function test_replay_rejects_currency_changes(string $operation): void
     {
-        $line = PayrollLine::create('line-1', Money::fromDecimal('100', Currency::Eur));
+        if (count(Currency::cases()) < 2) {
+            $this->markTestSkipped('Requires at least two enabled currencies.');
+        }
+
+        $line = PayrollLine::create('line-1', Money::fromDecimal('100', Currency::cases()[1]));
         $eventClass = $operation === 'adjustment' ? ManualAdjustmentApplied::class : PayrollLineCalculated::class;
         $event = new $eventClass(
             'line-1', str_repeat('a', 32), 2, new DateTimeImmutable('2026-01-01Z'),

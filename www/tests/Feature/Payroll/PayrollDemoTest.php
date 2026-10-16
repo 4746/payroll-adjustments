@@ -29,7 +29,7 @@ class PayrollDemoTest extends TestCase
             ->assertSuccessful();
 
         $this->assertDatabaseCount('payroll_events', 7);
-        $this->assertDatabaseHas('payroll_events', ['aggregate_id' => 'demo-test', 'version' => 7]);
+        $this->assertDatabaseHas('payroll_events', ['payroll_id' => 'demo-test', 'version' => 7]);
     }
 
     public function test_duplicate_demo_id_returns_failure_without_appending_or_overwriting_events(): void

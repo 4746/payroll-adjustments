@@ -14,6 +14,13 @@ interface EventStore
 {
     public function load(string $id): PayrollLine;
 
+    public function history(string $id): AdjustmentHistory;
+
+    /** @return list<PayrollLine> */
+    public function list(int $offset, int $limit): array;
+
+    public function rebuild(string $id): void;
+
     /**
      * Append a unit of work once. Reload before the next operation.
      * The entire pending batch must succeed or leave persisted history unchanged.

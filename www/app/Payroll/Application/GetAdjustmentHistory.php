@@ -10,8 +10,6 @@ final readonly class GetAdjustmentHistory
 
     public function handle(string $id): AdjustmentHistory
     {
-        $line = $this->events->load($id);
-
-        return new AdjustmentHistory($line->id, $line->amount(), $line->frozenSystemAmount(), $line->adjustments());
+        return $this->events->history($id);
     }
 }

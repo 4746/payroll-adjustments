@@ -19,25 +19,71 @@ class PayrollLineHttpTest extends TestCase
 
     private const string BASE = '/api/v1/payroll-lines';
 
+    public function test_write_responses_do_not_read_history_and_full_audit_is_still_available(): void
+    {
+        $this->postJson(self::BASE, ['id' => 'fast-line', 'amount' => '100'])->assertCreated();
+        $this->postJson(self::BASE.'/fast-line/adjustments', ['amount' => '1', 'comment' => 'First'])->assertCreated();
+        DB::connection()->enableQueryLog();
+        DB::connection()->flushQueryLog();
+
+        try {
+            $this->postJson(self::BASE.'/fast-line/adjustments', ['amount' => '2', 'comment' => 'Second'])
+                ->assertCreated()->assertJsonPath('data.current_amount', '103.00')
+                ->assertJsonCount(1, 'data.adjustments')->assertJsonPath('data.adjustments.0.comment', 'Second');
+            foreach (DB::connection()->getQueryLog() as $query) {
+                $this->assertFalse(str_starts_with($query['query'], 'select') && str_contains($query['query'], 'payroll_events'));
+            }
+        } finally {
+            DB::connection()->disableQueryLog();
+        }
+
+        $this->getJson(self::BASE.'/fast-line/adjustments')->assertOk()->assertJsonCount(2, 'data.adjustments');
+    }
+
+    public function test_list_reads_one_page_of_current_states_in_one_query_without_history(): void
+    {
+        $store = $this->app->make(EventStore::class);
+        for ($index = 0; $index < 101; $index++) {
+            $store->append(PayrollLine::create(sprintf('line-%03d', $index), Money::fromDecimal('100')));
+        }
+        DB::connection()->enableQueryLog();
+        DB::connection()->flushQueryLog();
+
+        try {
+            $this->getJson(self::BASE.'?per_page=100')->assertOk()->assertJsonCount(100, 'data')
+                ->assertJsonPath('data.0.id', 'line-000')->assertJsonPath('data.0.current_amount', '100.00')
+                ->assertJsonPath('meta.has_more', true);
+            $queries = DB::connection()->getQueryLog();
+            $this->assertCount(1, $queries);
+            $this->assertStringContainsString('payrolls', $queries[0]['query']);
+        } finally {
+            DB::connection()->disableQueryLog();
+        }
+
+        $this->getJson(self::BASE.'?per_page=100&page=2')->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', 'line-100')->assertJsonPath('meta.has_more', false);
+        $this->getJson(self::BASE.'?per_page=101')->assertUnprocessable();
+    }
+
     public function test_currency_is_inherited_by_recalculations_adjustments_and_persisted_events(): void
     {
-        $this->postJson(self::BASE, ['id' => 'euro-line', 'amount' => '1000.00', 'currency' => 'EUR'])
-            ->assertCreated()->assertJsonPath('data.currency', 'EUR');
+        $this->postJson(self::BASE, ['id' => 'euro-line', 'amount' => '1000.00', 'currency' => 'USD'])
+            ->assertCreated()->assertJsonPath('data.currency', 'USD');
         $this->postJson(self::BASE.'/euro-line/recalculations', ['amount' => '1050.00'])
-            ->assertOk()->assertJsonPath('data.currency', 'EUR');
+            ->assertOk()->assertJsonPath('data.currency', 'USD');
         $this->postJson(self::BASE.'/euro-line/adjustments', ['amount' => '-45.55', 'comment' => 'Leave'])
-            ->assertCreated()->assertJsonPath('data.currency', 'EUR')->assertJsonPath('data.current_amount', '1004.45');
+            ->assertCreated()->assertJsonPath('data.currency', 'USD')->assertJsonPath('data.current_amount', '1004.45');
         $this->postJson(self::BASE.'/euro-line/recalculations', ['amount' => '1200.00'])
             ->assertOk()->assertJsonPath('data.current_amount', '1004.45');
         $this->getJson(self::BASE.'/euro-line')->assertOk()
-            ->assertJsonPath('data.currency', 'EUR')->assertJsonPath('data.current_amount', '1004.45');
+            ->assertJsonPath('data.currency', 'USD')->assertJsonPath('data.current_amount', '1004.45');
         $this->getJson(self::BASE.'/euro-line/adjustments')->assertOk()
-            ->assertJsonPath('data.currency', 'EUR')->assertJsonPath('data.frozen_system_amount', '1050.00');
+            ->assertJsonPath('data.currency', 'USD')->assertJsonPath('data.frozen_system_amount', '1050.00');
 
-        $payloads = DB::table('payroll_events')->where('aggregate_id', 'euro-line')->orderBy('version')->pluck('payload');
+        $payloads = DB::table('payroll_events')->where('payroll_id', 'euro-line')->orderBy('version')->pluck('payload');
         $this->assertCount(3, $payloads);
         foreach ($payloads as $payload) {
-            $this->assertSame('EUR', json_decode($payload, true, 512, JSON_THROW_ON_ERROR)['currency']);
+            $this->assertSame('USD', json_decode($payload, true, 512, JSON_THROW_ON_ERROR)['currency']);
         }
     }
 
@@ -50,8 +96,8 @@ class PayrollLineHttpTest extends TestCase
 
     public function test_subsequent_requests_cannot_override_the_initial_currency(): void
     {
-        $this->postJson(self::BASE, ['id' => 'uah-line', 'amount' => '100.00', 'currency' => 'UAH'])
-            ->assertCreated()->assertJsonPath('data.currency', 'UAH');
+        $this->postJson(self::BASE, ['id' => 'uah-line', 'amount' => '100.00', 'currency' => 'USD'])
+            ->assertCreated()->assertJsonPath('data.currency', 'USD');
         $this->postJson(self::BASE.'/uah-line/adjustments', ['amount' => '1.00', 'currency' => 'USD', 'comment' => 'Bonus'])
             ->assertUnprocessable()->assertJsonValidationErrors('currency');
         $this->postJson(self::BASE.'/uah-line/recalculations', ['amount' => '200.00', 'currency' => 'USD'])
@@ -89,7 +135,7 @@ class PayrollLineHttpTest extends TestCase
             ->assertJsonPath('data.adjustments.4.amount', '0.20');
         $this->assertSame(['Unpaid leave', 'Bonus', 'Correction A', 'Correction B', 'Reverse correction B'], array_column($audit->json('data.adjustments'), 'comment'));
         $this->assertSame([3, 4, 5, 6, 7], array_column($audit->json('data.adjustments'), 'version'));
-        $first = DB::table('payroll_events')->where('aggregate_id', 'http-line')->where('version', 3)->first();
+        $first = DB::table('payroll_events')->where('payroll_id', 'http-line')->where('version', 3)->first();
         $this->assertSame($first->event_id, $audit->json('data.adjustments.0.event_id'));
         $this->assertMatchesRegularExpression('/^\\d{4}-\\d{2}-\\d{2}T.*\\.\\d{6}Z$/', $audit->json('data.adjustments.0.occurred_at'));
         $this->assertDatabaseCount('payroll_events', 7);

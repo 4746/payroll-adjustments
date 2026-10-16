@@ -113,6 +113,21 @@ final class PayrollLine
         ));
     }
 
+    /** Restore the current state without loading the historical audit. */
+    public static function fromState(string $id, Money $amount, ?Money $frozenSystemAmount, int $version): self
+    {
+        if ($version < 1 || ($frozenSystemAmount !== null && ($version < 2 || $frozenSystemAmount->currency !== $amount->currency))) {
+            throw new InvalidHistory('Invalid persisted payroll state.');
+        }
+
+        $line = new self($id);
+        $line->amount = $amount;
+        $line->frozenSystemAmount = $frozenSystemAmount;
+        $line->version = $version;
+
+        return $line;
+    }
+
     public function amount(): Money
     {
         return $this->amount;
@@ -138,7 +153,8 @@ final class PayrollLine
     }
 
     /**
-     * Immutable adjustment facts in application order, including pending work.
+     * Adjustment facts observed during replay or this unit of work.
+     * State-only loads do not include historical adjustments; query audit separately.
      *
      * @return list<ManualAdjustmentApplied>
      */

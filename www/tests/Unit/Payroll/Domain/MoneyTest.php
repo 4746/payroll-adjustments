@@ -16,17 +16,23 @@ class MoneyTest extends TestCase
 {
     public function test_arithmetic_preserves_currency(): void
     {
-        $money = Money::fromDecimal('10.00', Currency::Eur);
-        $this->assertSame(Currency::Eur, $money->add(Money::fromDecimal('2.00', Currency::Eur))->currency);
-        $this->assertSame(Currency::Eur, $money->subtract(Money::fromDecimal('2.00', Currency::Eur))->currency);
-        $this->assertSame(Currency::Uah, Money::fromMinorUnits(100, Currency::Uah)->currency);
+        foreach (Currency::cases() as $currency) {
+            $money = Money::fromDecimal('10.00', $currency);
+            $this->assertSame($currency, $money->add(Money::fromDecimal('2.00', $currency))->currency);
+            $this->assertSame($currency, $money->subtract(Money::fromDecimal('2.00', $currency))->currency);
+            $this->assertSame($currency, Money::fromMinorUnits(100, $currency)->currency);
+        }
     }
 
     #[DataProvider('currencyOperations')]
     public function test_arithmetic_rejects_different_currencies(string $operation): void
     {
+        if (count(Currency::cases()) < 2) {
+            $this->markTestSkipped('Requires at least two enabled currencies.');
+        }
+
         $this->expectException(InvalidAdjustment::class);
-        Money::fromDecimal('10.00', Currency::Usd)->{$operation}(Money::fromDecimal('1.00', Currency::Eur));
+        Money::fromDecimal('10.00', Currency::cases()[0])->{$operation}(Money::fromDecimal('1.00', Currency::cases()[1]));
     }
 
     /** @return list<array{string}> */

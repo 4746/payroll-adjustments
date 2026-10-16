@@ -6,6 +6,7 @@ namespace App\Payroll\Http\Resources;
 
 use App\Payroll\Application\AdjustmentHistory;
 use App\Payroll\Domain\ManualAdjustmentApplied;
+use App\Payroll\Domain\PayrollLine;
 use DateTimeZone;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -16,6 +17,12 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class PayrollLineResource extends JsonResource
 {
+    /** Write responses include only corrections created by this operation; full audit has its own endpoint. */
+    public static function fromLine(PayrollLine $line): self
+    {
+        return new self(new AdjustmentHistory($line->id, $line->amount(), $line->frozenSystemAmount(), $line->adjustments()));
+    }
+
     /** @return array{id: string, currency: string, current_amount: string, frozen_system_amount: ?string, adjustments: list<array{event_id: string, version: int, amount: string, comment: string, occurred_at: string}>} */
     public function toArray(Request $request): array
     {

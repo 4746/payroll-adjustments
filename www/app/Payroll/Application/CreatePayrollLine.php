@@ -11,8 +11,11 @@ final readonly class CreatePayrollLine
 {
     public function __construct(private EventStore $events) {}
 
-    public function handle(string $id, Money $amount): void
+    public function handle(string $id, Money $amount): PayrollLine
     {
-        $this->events->append(PayrollLine::create($id, $amount));
+        $line = PayrollLine::create($id, $amount);
+        $this->events->append($line);
+
+        return $line;
     }
 }

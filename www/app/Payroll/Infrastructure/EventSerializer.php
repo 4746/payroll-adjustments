@@ -29,7 +29,7 @@ final class EventSerializer
      * Encode cents as integer strings to preserve precision in JSON consumers.
      * Normalize timestamps to UTC while retaining their microseconds.
      *
-     * @return array{aggregate_id: string, event_id: string, version: int, event_type: string, payload: string, occurred_at: string}
+     * @return array{payroll_id: string, event_id: string, version: int, event_type: string, payload: string, occurred_at: string}
      */
     public function serialize(PayrollEvent $event): array
     {
@@ -39,7 +39,7 @@ final class EventSerializer
         }
 
         return [
-            'aggregate_id' => $event->aggregateId,
+            'payroll_id' => $event->aggregateId,
             'event_id' => $event->eventId,
             'version' => $event->version,
             'event_type' => match ($event::class) {
@@ -88,7 +88,7 @@ final class EventSerializer
             }
 
             return new $eventClass(
-                $row->aggregate_id, $row->event_id, $version, $time,
+                $row->payroll_id, $row->event_id, $version, $time,
                 Money::fromMinorUnits($minorUnits, Currency::from($payload['currency'])), $payload['comment'] ?? null,
             );
         } catch (JsonException|InvalidArgumentException|DomainException|TypeError $exception) {

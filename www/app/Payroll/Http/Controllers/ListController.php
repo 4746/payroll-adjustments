@@ -1,0 +1,40 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Payroll\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use App\Payroll\Application\GetPayrollLines;
+use App\Payroll\Domain\PayrollLine;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class ListController extends Controller
+{
+    public function __construct(private readonly GetPayrollLines $lines) {}
+
+    public function __invoke(Request $request): AnonymousResourceCollection
+    {
+        $input = $request->validate([
+            'page' => ['sometimes', 'integer', 'min:1', 'max:1000000'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+        ]);
+        $page = (int) ($input['page'] ?? 1);
+        $perPage = (int) ($input['per_page'] ?? 100);
+        $lines = $this->lines->handle($page, $perPage);
+        $hasMore = count($lines) > $perPage;
+        $items = array_map(fn (PayrollLine $line): array => [
+            'id' => $line->id,
+            'currency' => $line->amount()->currency->value,
+            'current_amount' => $line->amount()->toDecimal(),
+            'frozen_system_amount' => $line->frozenSystemAmount()?->toDecimal(),
+            'version' => $line->version(),
+        ], array_slice($lines, 0, $perPage));
+
+        return JsonResource::collection($items)->additional([
+            'meta' => ['page' => $page, 'per_page' => $perPage, 'has_more' => $hasMore],
+        ]);
+    }
+}

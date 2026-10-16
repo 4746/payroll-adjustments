@@ -25,6 +25,78 @@ use Tests\TestCase;
 
 class MySqlEventStoreTest extends TestCase
 {
+    public function test_state_load_and_append_do_not_select_the_event_history(): void
+    {
+        $store = $this->app->make(EventStore::class);
+        $line = PayrollLine::create('state-line', Money::fromDecimal('100'));
+        for ($index = 0; $index < 1000; $index++) {
+            $line->applyAdjustment(Money::fromDecimal('0.01'), 'Adjustment');
+        }
+        $store->append($line);
+        DB::connection()->enableQueryLog();
+        DB::connection()->flushQueryLog();
+
+        try {
+            $loaded = $store->load('state-line');
+            $this->assertSame('110.00', $loaded->amount()->toDecimal());
+            $this->assertSame(1001, $loaded->version());
+            $this->assertCount(1, DB::connection()->getQueryLog());
+            $loaded->applyAdjustment(Money::fromDecimal('1'), 'Next');
+            $store->append($loaded);
+
+            foreach (DB::connection()->getQueryLog() as $query) {
+                $this->assertFalse(str_starts_with($query['query'], 'select') && str_contains($query['query'], 'payroll_events'));
+            }
+        } finally {
+            DB::connection()->disableQueryLog();
+        }
+
+        $this->assertDatabaseHas('payrolls', ['id' => 'state-line', 'current_amount_minor' => 11100, 'version' => 1002, 'frozen_system_amount_minor' => 10000]);
+    }
+
+    public function test_rebuild_restores_the_current_state_without_changing_history(): void
+    {
+        $store = $this->app->make(EventStore::class);
+        $line = PayrollLine::create('rebuild-line', Money::fromDecimal('100'));
+        $line->applyAdjustment(Money::fromDecimal('5'), 'Bonus');
+        $store->append($line);
+        DB::table('payrolls')->where('id', 'rebuild-line')->delete();
+
+        $this->artisan('payroll:rebuild-states', ['--id' => 'rebuild-line'])->assertSuccessful();
+
+        $this->assertDatabaseHas('payrolls', ['id' => 'rebuild-line', 'current_amount_minor' => 10500, 'frozen_system_amount_minor' => 10000, 'version' => 2]);
+        $this->assertDatabaseCount('payroll_events', 2);
+        $loaded = $store->load('rebuild-line');
+        $loaded->recalculate(Money::fromDecimal('999'));
+        $this->assertSame([], $loaded->pendingEvents());
+    }
+
+    public function test_rebuild_rejects_corrupt_history_without_overwriting_current_state(): void
+    {
+        $store = $this->app->make(EventStore::class);
+        $store->append(PayrollLine::create('corrupt-line', Money::fromDecimal('100')));
+        DB::table('payroll_events')->where('payroll_id', 'corrupt-line')->update(['event_type' => 'unknown.v1']);
+
+        $this->artisan('payroll:rebuild-states', ['--id' => 'corrupt-line'])->assertFailed();
+
+        $this->assertDatabaseHas('payrolls', ['id' => 'corrupt-line', 'version' => 1, 'current_amount_minor' => 10000]);
+    }
+
+    public function test_frozen_zero_baseline_stays_frozen_after_state_load(): void
+    {
+        $store = $this->app->make(EventStore::class);
+        $line = PayrollLine::create('zero-line', Money::fromDecimal('0'));
+        $line->applyAdjustment(Money::fromDecimal('1'), 'Bonus');
+        $store->append($line);
+
+        $loaded = $store->load('zero-line');
+        $loaded->recalculate(Money::fromDecimal('999'));
+
+        $this->assertSame(0, $loaded->frozenSystemAmount()->minorUnits);
+        $this->assertSame('1.00', $loaded->amount()->toDecimal());
+        $this->assertSame([], $loaded->pendingEvents());
+    }
+
     use LazilyRefreshDatabase;
 
     public function test_event_batches_persist_in_application_order_and_reload_with_metadata(): void
@@ -43,7 +115,7 @@ class MySqlEventStoreTest extends TestCase
         $this->assertSame('1050.00', $reloaded->frozenSystemAmount()->toDecimal());
         $this->assertSame([], $reloaded->pendingEvents());
         $this->assertSame([1, 2, 3], DB::table('payroll_events')->orderBy('version')->pluck('version')->all());
-        $adjustment = $reloaded->adjustments()[0];
+        $adjustment = $store->history('line-1')->adjustments[0];
         $this->assertSame('Unpaid leave', $adjustment->comment);
         $this->assertSame($line->adjustments()[0]->eventId, $adjustment->eventId);
         $this->assertSame($line->adjustments()[0]->occurredAt->format('U.u'), $adjustment->occurredAt->format('U.u'));
@@ -66,7 +138,7 @@ class MySqlEventStoreTest extends TestCase
         } catch (ConcurrencyConflict $exception) {
             $this->assertStringContainsString('line-1', $exception->getMessage());
             $this->assertSame('1010.00', $store->load('line-1')->amount()->toDecimal());
-            $this->assertSame('Winner', $store->load('line-1')->adjustments()[0]->comment);
+            $this->assertSame('Winner', $store->history('line-1')->adjustments[0]->comment);
             $this->assertDatabaseCount('payroll_events', 2);
         }
     }
@@ -90,7 +162,7 @@ class MySqlEventStoreTest extends TestCase
         $racer = new MySqlEventStore($racerConnection, new EventSerializer);
         $raced = false;
         $writerConnection->beforeExecuting(function (string $query) use (&$raced, $racer): void {
-            if (! $raced && str_starts_with($query, 'insert into `payroll_events`')) {
+            if (! $raced && str_starts_with($query, 'insert into `payrolls`')) {
                 $raced = true;
                 $racer->append(PayrollLine::create('race-line', Money::fromDecimal('2000')));
             }
@@ -103,10 +175,11 @@ class MySqlEventStoreTest extends TestCase
             } catch (ConcurrencyConflict) {
                 $this->assertTrue($raced);
                 $this->assertSame('2000.00', $writer->load('race-line')->amount()->toDecimal());
-                $this->assertSame(1, $writerConnection->table('payroll_events')->where('aggregate_id', 'race-line')->count());
+                $this->assertSame(1, $writerConnection->table('payroll_events')->where('payroll_id', 'race-line')->count());
             }
         } finally {
-            $racerConnection->table('payroll_events')->where('aggregate_id', 'race-line')->delete();
+            $racerConnection->table('payroll_events')->where('payroll_id', 'race-line')->delete();
+            $racerConnection->table('payrolls')->where('id', 'race-line')->delete();
             DB::purge('payroll_writer');
             DB::purge('payroll_racer');
         }
@@ -155,6 +228,7 @@ class MySqlEventStoreTest extends TestCase
             $this->assertSame('Simulated write failure', $exception->getMessage());
             $this->assertDatabaseCount('payroll_events', 1);
             $this->assertSame('1000.00', $store->load('line-1')->amount()->toDecimal());
+            $this->assertDatabaseHas('payrolls', ['id' => 'line-1', 'version' => 1, 'current_amount_minor' => 100000, 'frozen_system_amount_minor' => null]);
             $this->assertSame([], $store->load('line-1')->adjustments());
         }
         $store->append($line);
@@ -179,6 +253,7 @@ class MySqlEventStoreTest extends TestCase
         } catch (QueryException $exception) {
             $this->assertStringContainsString('Injected failure', $exception->getMessage());
             $this->assertDatabaseCount('payroll_events', 0);
+            $this->assertDatabaseCount('payrolls', 0);
         }
         $store->append($line);
         $this->assertSame('1010.00', $store->load('line-1')->amount()->toDecimal());
@@ -199,10 +274,10 @@ class MySqlEventStoreTest extends TestCase
         $this->assertSame('1050.00', $amount->handle('line-1')->toDecimal());
         $adjust->handle('line-1', Money::fromDecimal('-45.55'), 'Unpaid leave');
         $this->assertSame('1004.45', $amount->handle('line-1')->toDecimal());
-        $before = DB::table('payroll_events')->where('aggregate_id', 'line-1')->orderBy('version')->get()->toJson();
+        $before = DB::table('payroll_events')->where('payroll_id', 'line-1')->orderBy('version')->get()->toJson();
         $recalculate->handle('line-1', Money::fromDecimal('1200'));
         $this->assertSame('1004.45', $amount->handle('line-1')->toDecimal());
-        $this->assertSame($before, DB::table('payroll_events')->where('aggregate_id', 'line-1')->orderBy('version')->get()->toJson());
+        $this->assertSame($before, DB::table('payroll_events')->where('payroll_id', 'line-1')->orderBy('version')->get()->toJson());
         foreach ([['100.10', 'Bonus', '1104.55'], ['-0.10', 'Correction A', '1104.45'], ['-0.20', 'Correction B', '1104.25'], ['0.20', 'Reverse B', '1104.45']] as [$delta, $comment, $expected]) {
             $adjust->handle('line-1', Money::fromDecimal($delta), $comment);
             $this->assertSame($expected, $amount->handle('line-1')->toDecimal());

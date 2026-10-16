@@ -13,12 +13,12 @@ return new class extends Migration
         Schema::create('payroll_events', function (Blueprint $table): void {
             $table->engine('InnoDB');
             $table->char('event_id', 32)->collation('ascii_bin')->primary();
-            $table->string('aggregate_id', 128)->collation('ascii_bin');
+            $table->string('payroll_id', 128)->collation('ascii_bin');
             $table->unsignedBigInteger('version');
             $table->string('event_type', 64);
             $table->json('payload');
             $table->dateTime('occurred_at', 6);
-            $table->unique(['aggregate_id', 'version'], 'payroll_events_stream_version_unique');
+            $table->unique(['payroll_id', 'version'], 'payroll_events_stream_version_unique');
         });
     }
 
