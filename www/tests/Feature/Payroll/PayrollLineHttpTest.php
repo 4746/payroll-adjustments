@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Payroll;
 
 use App\Payroll\Application\ConcurrencyConflict;
-use App\Payroll\Application\EventStore;
+use App\Payroll\Application\PayrollRepository;
 use App\Payroll\Domain\Money;
 use App\Payroll\Domain\PayrollLine;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
@@ -59,7 +59,7 @@ class PayrollLineHttpTest extends TestCase
 
     public function test_list_reads_one_page_of_current_states_in_one_query_without_history(): void
     {
-        $store = $this->app->make(EventStore::class);
+        $store = $this->app->make(PayrollRepository::class);
         for ($index = 0; $index < 101; $index++) {
             $store->append(PayrollLine::create(sprintf('line-%03d', $index), Money::fromDecimal('100')));
         }
@@ -199,7 +199,7 @@ class PayrollLineHttpTest extends TestCase
     public function test_write_conflicts_are_rendered_as_409(): void
     {
         $this->postJson(self::BASE, ['id' => 'line', 'amount' => '1000'])->assertCreated();
-        $store = $this->mock(EventStore::class);
+        $store = $this->mock(PayrollRepository::class);
         $store->shouldReceive('load')->with('line')->once()->andReturn(PayrollLine::create('line', Money::fromDecimal('1000')));
         $store->shouldReceive('append')->once()->andThrow(new ConcurrencyConflict('Reload before retrying.'));
         $this->postJson(self::BASE.'/line/adjustments', ['amount' => '1', 'comment' => 'Conflict'])

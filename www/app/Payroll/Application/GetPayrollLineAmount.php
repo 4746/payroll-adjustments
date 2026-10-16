@@ -8,10 +8,10 @@ use App\Payroll\Domain\Money;
 
 final readonly class GetPayrollLineAmount
 {
-    public function __construct(private EventStore $events) {}
+    public function __construct(private PayrollQueries $queries) {}
 
     public function handle(string $id): Money
     {
-        return $this->events->load(id: $id)->amount();
+        return $this->queries->amount(id: $id);
     }
 }

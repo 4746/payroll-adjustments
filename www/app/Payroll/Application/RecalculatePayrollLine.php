@@ -9,14 +9,14 @@ use App\Payroll\Domain\PayrollLine;
 
 final readonly class RecalculatePayrollLine
 {
-    public function __construct(private EventStore $events) {}
+    public function __construct(private PayrollRepository $repository) {}
 
     public function handle(string $id, Money|string $amount): PayrollLine
     {
-        $line = $this->events->load(id: $id);
+        $line = $this->repository->load(id: $id);
         $amount = is_string($amount) ? Money::fromDecimal(amount: $amount, currency: $line->amount()->currency) : $amount;
         $line->recalculate(amount: $amount);
-        $this->events->append(line: $line);
+        $this->repository->append(line: $line);
 
         return $line;
     }

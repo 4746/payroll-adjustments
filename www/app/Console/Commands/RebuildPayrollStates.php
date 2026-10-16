@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Payroll\Application\EventStore;
+use App\Payroll\Application\PayrollStateRebuilder;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -15,7 +15,7 @@ use Throwable;
 #[Description('Rebuild current payroll states from the immutable event history')]
 class RebuildPayrollStates extends Command
 {
-    public function handle(EventStore $events): int
+    public function handle(PayrollStateRebuilder $rebuilder): int
     {
         try {
             $id = $this->option('id');
@@ -30,7 +30,7 @@ class RebuildPayrollStates extends Command
             $count = 0;
 
             foreach ($ids as $payrollId) {
-                $events->rebuild($payrollId);
+                $rebuilder->rebuild(id: $payrollId);
                 $count++;
             }
 

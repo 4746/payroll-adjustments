@@ -18,11 +18,11 @@ One payroll line is one aggregate and one ordered event stream. DDD keeps rules 
 | Folder | Responsibility |
 | --- | --- |
 | `app/Payroll/Domain` | Aggregate, immutable Money/events, enums, ID validators, decimal parser and business invariants |
-| `app/Payroll/Application` | Create/recalculate/adjust use cases, amount/list/audit queries and the `EventStore` interface |
+| `app/Payroll/Application` | Use cases and separate `PayrollRepository`, `PayrollQueries`, `PayrollStateRebuilder` contracts |
 | `app/Payroll/Infrastructure` | MySQL current state and journal, versioned serialization, transactions and rebuilding |
 | `app/Payroll/Http` | Controllers, Form Request validation and API resources; API versioning is in `routes/api.php` |
 
-HTTP request → Form Request → controller → Application → Domain → persistence through `EventStore` → response resource. `AppServiceProvider` binds the interface to `MySqlEventStore`; Domain has no Laravel or database dependencies.
+HTTP writes pass through Form Request → controller → Application → Domain → `PayrollRepository` → response resource. Reads use `PayrollQueries`; CLI recovery uses `PayrollStateRebuilder`. `AppServiceProvider` binds these contracts to separate MySQL implementations. They share state mapping and event replay within Infrastructure; Domain has no Laravel or database dependencies.
 
 ### Storage and consistency
 

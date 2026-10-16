@@ -9,7 +9,7 @@ use InvalidArgumentException;
 
 final readonly class GetPayrollLines
 {
-    public function __construct(private EventStore $events) {}
+    public function __construct(private PayrollQueries $queries) {}
 
     /** @return list<PayrollLine> */
     public function handle(int $page = 1, int $perPage = 100): array
@@ -18,6 +18,6 @@ final readonly class GetPayrollLines
             throw new InvalidArgumentException(message: 'Invalid payroll list page.');
         }
 
-        return $this->events->list(offset: ($page - 1) * $perPage, limit: $perPage + 1);
+        return $this->queries->list(offset: ($page - 1) * $perPage, limit: $perPage + 1);
     }
 }
