@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Payroll\Infrastructure;
 
+use App\Payroll\Domain\Currency;
 use App\Payroll\Domain\InvalidHistory;
 use App\Payroll\Domain\ManualAdjustmentApplied;
 use App\Payroll\Domain\Money;
@@ -32,7 +33,7 @@ final class EventSerializer
      */
     public function serialize(PayrollEvent $event): array
     {
-        $payload = ['schema_version' => 1, 'currency' => 'USD', 'amount_minor' => (string) $event->amount->minorUnits];
+        $payload = ['schema_version' => 1, 'currency' => Currency::Usd->value, 'amount_minor' => (string) $event->amount->minorUnits];
         if ($event instanceof ManualAdjustmentApplied) {
             $payload['comment'] = $event->comment;
         }
@@ -72,7 +73,7 @@ final class EventSerializer
 
             if ($keys !== $expectedKeys
                 || $payload['schema_version'] !== 1
-                || $payload['currency'] !== 'USD'
+                || $payload['currency'] !== Currency::Usd->value
                 || ! is_string($payload['amount_minor'])
                 || preg_match('/^(0|-?[1-9][0-9]*)$/D', $payload['amount_minor']) !== 1
                 || ($eventClass === ManualAdjustmentApplied::class && ! is_string($payload['comment']))) {

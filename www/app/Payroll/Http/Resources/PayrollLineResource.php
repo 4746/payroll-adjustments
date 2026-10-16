@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Payroll\Http\Resources;
 
 use App\Payroll\Application\AdjustmentHistory;
+use App\Payroll\Domain\Currency;
 use App\Payroll\Domain\ManualAdjustmentApplied;
 use DateTimeZone;
 use Illuminate\Http\Request;
@@ -24,7 +25,7 @@ class PayrollLineResource extends JsonResource
 
         return [
             'id' => $history->payrollLineId,
-            'currency' => 'USD',
+            'currency' => Currency::Usd->value,
             'current_amount' => $history->currentAmount->toDecimal(),
             'frozen_system_amount' => $history->frozenSystemAmount?->toDecimal(),
             'adjustments' => array_map(fn (ManualAdjustmentApplied $event): array => [

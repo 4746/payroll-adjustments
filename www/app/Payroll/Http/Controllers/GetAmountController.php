@@ -6,6 +6,7 @@ namespace App\Payroll\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Payroll\Application\GetPayrollLineAmount;
+use App\Payroll\Domain\Currency;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
@@ -20,7 +21,7 @@ class GetAmountController extends Controller
     {
         return new JsonResource([
             'id' => $id,
-            'currency' => 'USD',
+            'currency' => Currency::Usd->value,
             'current_amount' => $this->amount->handle($id)->toDecimal(),
         ]);
     }

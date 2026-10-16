@@ -10,6 +10,7 @@ use App\Payroll\Application\CreatePayrollLine;
 use App\Payroll\Application\GetAdjustmentHistory;
 use App\Payroll\Application\GetPayrollLineAmount;
 use App\Payroll\Application\RecalculatePayrollLine;
+use App\Payroll\Domain\Currency;
 use App\Payroll\Domain\ManualAdjustmentApplied;
 use App\Payroll\Domain\Money;
 use DateTimeZone;
@@ -54,7 +55,7 @@ class PayrollDemo extends Command
 
             $audit = $history->handle($id);
             $this->line('Frozen system amount: $'.$audit->frozenSystemAmount->toDecimal());
-            $this->table(['Version', 'Adjustment (USD)', 'Comment', 'Event ID', 'Timestamp (UTC)'], array_map(
+            $this->table(['Version', 'Adjustment ('.Currency::Usd->value.')', 'Comment', 'Event ID', 'Timestamp (UTC)'], array_map(
                 fn (ManualAdjustmentApplied $event): array => [
                     $event->version,
                     ($event->amount->minorUnits > 0 ? '+' : '').$event->amount->toDecimal(),

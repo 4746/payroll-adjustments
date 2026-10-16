@@ -26,7 +26,7 @@ class ApplyAdjustmentController extends Controller
     {
         $this->adjust->handle($id, $request->money(), $request->validated('comment'));
 
-        return (new PayrollLineResource($this->history->handle($id)))
+        return new PayrollLineResource($this->history->handle($id))
             ->response()->setStatusCode(201);
     }
 }

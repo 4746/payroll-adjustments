@@ -30,14 +30,14 @@ final readonly class Money
     public static function fromDecimal(string $amount): self
     {
         if (preg_match('/^([+-]?)(0|[1-9][0-9]*)(?:\.([0-9]{1,2}))?$/D', $amount, $parts) !== 1) {
-            throw new InvalidArgumentException('Use a USD decimal with at most two fractional digits.');
+            throw new InvalidArgumentException('Use a '.Currency::Usd->value.' decimal with at most two fractional digits.');
         }
 
         $digits = ltrim($parts[2].str_pad($parts[3] ?? '', 2, '0'), '0');
         $minorUnits = filter_var(($parts[1] === '-' && $digits !== '' ? '-' : '').($digits === '' ? '0' : $digits), FILTER_VALIDATE_INT);
 
         if ($minorUnits === false) {
-            throw new InvalidArgumentException('USD amount exceeds the integer minor-unit range.');
+            throw new InvalidArgumentException(Currency::Usd->value.' amount exceeds the integer minor-unit range.');
         }
 
         return new self($minorUnits);

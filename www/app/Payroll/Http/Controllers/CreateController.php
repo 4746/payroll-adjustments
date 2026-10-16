@@ -27,7 +27,7 @@ class CreateController extends Controller
         $id = $request->validated('id');
         $this->create->handle($id, $request->money());
 
-        return (new PayrollLineResource($this->history->handle($id)))
+        return new PayrollLineResource($this->history->handle($id))
             ->response()->setStatusCode(201);
     }
 }
