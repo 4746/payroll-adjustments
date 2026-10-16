@@ -9,6 +9,7 @@ use App\Payroll\Domain\InvalidHistory;
 use App\Payroll\Domain\ManualAdjustmentApplied;
 use App\Payroll\Domain\Money;
 use App\Payroll\Domain\PayrollEvent;
+use App\Payroll\Domain\PayrollEventType;
 use App\Payroll\Domain\PayrollLineCalculated;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -43,8 +44,8 @@ final class EventSerializer
             'event_id' => $event->eventId,
             'version' => $event->version,
             'event_type' => match ($event::class) {
-                PayrollLineCalculated::class => 'payroll_line_calculated.v1',
-                ManualAdjustmentApplied::class => 'manual_adjustment_applied.v1',
+                PayrollLineCalculated::class => PayrollEventType::Calculated->value,
+                ManualAdjustmentApplied::class => PayrollEventType::ManualAdjustmentApplied->value,
                 default => throw new InvalidHistory('Unknown payroll event type.'),
             },
             'payload' => json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
@@ -59,9 +60,9 @@ final class EventSerializer
     public function deserialize(stdClass $row): PayrollEvent
     {
         try {
-            $eventClass = match ($row->event_type) {
-                'payroll_line_calculated.v1' => PayrollLineCalculated::class,
-                'manual_adjustment_applied.v1' => ManualAdjustmentApplied::class,
+            $eventClass = match (PayrollEventType::tryFrom($row->event_type)) {
+                PayrollEventType::Calculated => PayrollLineCalculated::class,
+                PayrollEventType::ManualAdjustmentApplied => ManualAdjustmentApplied::class,
                 default => throw new InvalidHistory('Unknown persisted event type.'),
             };
             $payload = json_decode($row->payload, true, 512, JSON_THROW_ON_ERROR);

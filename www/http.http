@@ -5,7 +5,7 @@
 # Amounts must remain quoted JSON strings. Expected amounts below use the defaults.
 
 @baseUrl = http://localhost/api/v1
-@payrollLineId = manual-payroll-005
+@payrollLineId = manual-payroll-002
 @initialAmount = 1000.00
 @recalculatedAmount = 1050.00
 @adjustmentAmount = -45.55
