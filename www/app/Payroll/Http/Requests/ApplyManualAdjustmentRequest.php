@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Requests\Payroll;
+namespace App\Payroll\Http\Requests;
 
-class CreatePayrollLineRequest extends PayrollAmountRequest
+class ApplyManualAdjustmentRequest extends PayrollAmountRequest
 {
     /** @return array<string, list<mixed>> */
     public function rules(): array
     {
         return [
             ...parent::rules(),
-            'id' => ['required', 'string', 'regex:/^[A-Za-z0-9_-]{1,128}$/D'],
+            'comment' => ['required', 'string'],
         ];
     }
 }

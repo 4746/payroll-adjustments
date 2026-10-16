@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Controllers\Api\V1\Payroll;
+namespace App\Payroll\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Payroll\ApplyManualAdjustmentRequest;
-use App\Http\Resources\PayrollLineResource;
 use App\Payroll\Application\ApplyManualAdjustment;
 use App\Payroll\Application\GetAdjustmentHistory;
+use App\Payroll\Http\Requests\ApplyManualAdjustmentRequest;
+use App\Payroll\Http\Resources\PayrollLineResource;
 use Illuminate\Http\JsonResponse;
 
 /**

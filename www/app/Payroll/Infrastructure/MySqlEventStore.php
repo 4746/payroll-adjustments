@@ -17,11 +17,13 @@ use Illuminate\Database\UniqueConstraintViolationException;
  */
 final readonly class MySqlEventStore implements EventStore
 {
+    const string TABLE = 'payroll_events';
+
     public function __construct(private Connection $connection, private EventSerializer $serializer) {}
 
     public function load(string $id): PayrollLine
     {
-        $rows = $this->connection->table('payroll_events')
+        $rows = $this->connection->table(self::TABLE)
             ->where('aggregate_id', $id)->orderBy('version')->get();
 
         if ($rows->isEmpty()) {
@@ -45,7 +47,7 @@ final readonly class MySqlEventStore implements EventStore
 
         try {
             $this->connection->transaction(function () use ($line): void {
-                $storedVersion = (int) $this->connection->table('payroll_events')
+                $storedVersion = (int) $this->connection->table(self::TABLE)
                     ->where('aggregate_id', $line->id)->max('version');
 
                 if ($storedVersion !== $line->expectedVersion()) {
@@ -53,7 +55,7 @@ final readonly class MySqlEventStore implements EventStore
                 }
 
                 foreach ($line->pendingEvents() as $event) {
-                    $this->connection->table('payroll_events')->insert($this->serializer->serialize($event));
+                    $this->connection->table(self::TABLE)->insert($this->serializer->serialize($event));
                 }
             });
         } catch (UniqueConstraintViolationException $exception) {

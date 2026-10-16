@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Controllers\Api\V1\Payroll;
+namespace App\Payroll\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\PayrollLineResource;
 use App\Payroll\Application\GetAdjustmentHistory;
+use App\Payroll\Http\Resources\PayrollLineResource;
 
 /**
  * Present the frozen baseline and ordered adjustments from one replayed snapshot.

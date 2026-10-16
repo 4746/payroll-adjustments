@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Requests\Payroll;
+namespace App\Payroll\Http\Requests;
 
 use App\Payroll\Domain\Money;
 use Closure;

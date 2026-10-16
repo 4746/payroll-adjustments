@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Controllers\Api\V1\Payroll;
+namespace App\Payroll\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Payroll\Application\GetPayrollLineAmount;

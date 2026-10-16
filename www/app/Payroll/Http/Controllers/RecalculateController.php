@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Controllers\Api\V1\Payroll;
+namespace App\Payroll\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Payroll\PayrollAmountRequest;
-use App\Http\Resources\PayrollLineResource;
 use App\Payroll\Application\GetAdjustmentHistory;
 use App\Payroll\Application\RecalculatePayrollLine;
+use App\Payroll\Http\Requests\PayrollAmountRequest;
+use App\Payroll\Http\Resources\PayrollLineResource;
 
 /**
  * Delegate automatic recalculation to the application use case.

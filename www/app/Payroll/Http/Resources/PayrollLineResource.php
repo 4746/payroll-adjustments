@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Resources;
+namespace App\Payroll\Http\Resources;
 
 use App\Payroll\Application\AdjustmentHistory;
 use App\Payroll\Domain\ManualAdjustmentApplied;

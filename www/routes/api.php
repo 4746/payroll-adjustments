@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-use App\Http\Controllers\Api\V1\Payroll\ApplyAdjustmentController;
-use App\Http\Controllers\Api\V1\Payroll\CreateController;
-use App\Http\Controllers\Api\V1\Payroll\GetAdjustmentHistoryController;
-use App\Http\Controllers\Api\V1\Payroll\GetAmountController;
-use App\Http\Controllers\Api\V1\Payroll\RecalculateController;
+use App\Payroll\Http\Controllers\ApplyAdjustmentController;
+use App\Payroll\Http\Controllers\CreateController;
+use App\Payroll\Http\Controllers\GetAdjustmentHistoryController;
+use App\Payroll\Http\Controllers\GetAmountController;
+use App\Payroll\Http\Controllers\RecalculateController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1/payroll-lines')->name('api.v1.payroll-lines.')
