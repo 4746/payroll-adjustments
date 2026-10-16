@@ -121,3 +121,22 @@ Create/adjust return 201; reads/recalculations return 200. Invalid input returns
 - Journal immutability is enforced by application APIs, not against privileged SQL access. Production needs appropriate database permissions, access control and backups.
 - Requests have no idempotency keys: repeating an adjustment applies it again. After an uncertain commit, do not blindly retry. Production also needs a retry policy for concurrency/deadlocks and an event-schema evolution strategy.
 - Full audit and rebuild use time and memory proportional to history length. Ignored recalculations create no audit event. Stream versions determine order; timestamps are traceability metadata.
+
+## Possible next steps
+
+- **Idempotent adjustments:** accept a client-generated operation key and atomically
+  store its request parameters and result with the adjustment. Retries should return
+  the original result without applying another adjustment, including concurrent retries.
+  Reject the same key with different parameters.
+
+- **Audit actors and access control:** record who applied each adjustment and authorize
+  users to read or change the relevant payroll lines before enabling multi-user access.
+
+- **Employees and payroll periods:** link each payroll line to an employee and period,
+  keeping separate streams so an override in one period does not affect another.
+
+- **Paginated audit history:** return events in pages for long histories, reading the
+  current amount and frozen baseline from current state.
+
+- **Currency-specific precision:** define fractional digits per currency and use them
+  in parsing and formatting before enabling currencies with zero or three fractional digits.
