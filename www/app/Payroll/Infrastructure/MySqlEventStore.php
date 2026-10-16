@@ -55,8 +55,13 @@ final readonly class MySqlEventStore implements EventStore
             throw new InvalidArgumentException('Invalid payroll list bounds.');
         }
 
-        return $this->connection->table(self::STATE_TABLE)->orderBy('id')->offset($offset)->limit($limit)
-            ->get()->map($this->restore(...))->all();
+        return $this->connection->table(self::STATE_TABLE)
+            ->orderBy('id')
+            ->offset($offset)
+            ->limit($limit)
+            ->get()
+            ->map($this->restore(...))
+            ->all();
     }
 
     public function append(PayrollLine $line): void
@@ -93,15 +98,21 @@ final readonly class MySqlEventStore implements EventStore
     public function rebuild(string $id): void
     {
         $this->connection->transaction(function () use ($id): void {
-            $this->connection->table(self::STATE_TABLE)->where('id', $id)->lockForUpdate()->first();
+            $this->connection->table(self::STATE_TABLE)
+                ->where('id', $id)
+                ->lockForUpdate()
+                ->first();
             $line = $this->replay($id, true);
-            $this->connection->table(self::STATE_TABLE)->updateOrInsert(['id' => $id], $this->state($line));
+            $this->connection->table(self::STATE_TABLE)
+                ->updateOrInsert(['id' => $id], $this->state($line));
         });
     }
 
     private function replay(string $id, bool $lock = false): PayrollLine
     {
-        $query = $this->connection->table(self::TABLE)->where('payroll_id', $id)->orderBy('version');
+        $query = $this->connection->table(self::TABLE)
+            ->where('payroll_id', $id)
+            ->orderBy('version');
 
         if ($lock) {
             $query->lockForUpdate();
