@@ -73,7 +73,7 @@ final class EventSerializer
 
             if ($keys !== $expectedKeys
                 || $payload['schema_version'] !== 1
-                || $payload['currency'] !== Currency::Usd->value
+                || ! Currency::isAllowed($payload['currency'])
                 || ! is_string($payload['amount_minor'])
                 || preg_match('/^(0|-?[1-9][0-9]*)$/D', $payload['amount_minor']) !== 1
                 || ($eventClass === ManualAdjustmentApplied::class && ! is_string($payload['comment']))) {

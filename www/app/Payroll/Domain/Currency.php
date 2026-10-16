@@ -7,6 +7,8 @@ namespace App\Payroll\Domain;
 enum Currency: string
 {
     case Usd = 'USD';
+    // case Eur = 'EUR';
+    // case Uah = 'UAH';
 
     /**
      * Check membership in this enum, not support for currency conversion.
