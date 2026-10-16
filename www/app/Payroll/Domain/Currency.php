@@ -7,8 +7,16 @@ namespace App\Payroll\Domain;
 enum Currency: string
 {
     case Usd = 'USD';
-    case Eur = 'EUR';
-    case Uah = 'UAH';
+    // case Eur = 'EUR';
+    // case Uah = 'UAH';
+
+    // 1 dinar = 1000 fils; requires 3 decimal places, while Money currently uses 2.
+    // case Kwd = 'KWD';
+
+    // Bahraini and Jordanian dinars: 1000 fils; Tunisian dinar: 1000 millimes. All require 3 decimal places.
+    // case Bhd = 'BHD';
+    // case Jod = 'JOD';
+    // case Tnd = 'TND';
 
     /**
      * Check membership in this enum, not support for currency conversion.
