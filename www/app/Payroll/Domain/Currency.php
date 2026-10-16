@@ -12,9 +12,14 @@ enum Currency: string
      * Check membership in this enum, not support for currency conversion.
      * Strings are compared with backing values; enum instances with cases.
      * Every declared case is allowed, so a Currency instance always passes.
+     * Other input types are rejected with false instead of a type error.
      */
-    public static function isAllowed(Currency|string $value): bool
+    public static function isAllowed(mixed $value): bool
     {
+        if (! is_string($value) && ! $value instanceof self) {
+            return false;
+        }
+
         if (is_string($value)) {
             return in_array($value, self::values(), true);
         }
