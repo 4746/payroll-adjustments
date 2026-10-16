@@ -39,7 +39,7 @@ final class PayrollLine
 
     private function __construct(public readonly string $id)
     {
-        if (preg_match('/^[A-Za-z0-9_-]{1,128}$/D', $id) !== 1) {
+        if (! PayrollIdValidator::isValid(value: $id)) {
             throw new InvalidArgumentException(message: 'Payroll line IDs must contain 1-128 ASCII letters, digits, underscores or hyphens.');
         }
     }

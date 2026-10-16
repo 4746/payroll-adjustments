@@ -6,6 +6,7 @@ namespace App\Payroll\Http\Requests;
 
 use App\Payroll\Domain\Currency;
 use App\Payroll\Domain\Money;
+use App\Payroll\Domain\PayrollIdValidator;
 use Illuminate\Validation\Rule;
 
 class CreatePayrollLineRequest extends PayrollAmountRequest
@@ -15,7 +16,7 @@ class CreatePayrollLineRequest extends PayrollAmountRequest
     {
         return [
             ...parent::rules(),
-            'id' => ['required', 'string', 'regex:/^[A-Za-z0-9_-]{1,128}$/D'],
+            'id' => ['required', 'string', 'regex:'.PayrollIdValidator::REGEX],
             'currency' => ['sometimes', 'required', 'string', Rule::enum(Currency::class)],
         ];
     }

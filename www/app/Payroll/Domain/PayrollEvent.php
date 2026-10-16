@@ -23,7 +23,7 @@ abstract readonly class PayrollEvent
         public Money $amount,
         public ?string $comment = null,
     ) {
-        if (preg_match('/^[A-Za-z0-9_-]{1,128}$/D', $payrollId) !== 1
+        if (! PayrollIdValidator::isValid(value: $payrollId)
             || preg_match('/^[a-f0-9]{32}$/D', $eventId) !== 1
             || $version < 1) {
             throw new InvalidArgumentException(message: 'Invalid event identity or version.');
