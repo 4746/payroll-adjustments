@@ -108,8 +108,12 @@ final class PayrollLine
         }
 
         $this->record(new ManualAdjustmentApplied(
-            $this->id, bin2hex(random_bytes(16)), $this->version + 1,
-            new DateTimeImmutable('now', new DateTimeZone('UTC')), $amount, $comment,
+            payrollId: $this->id,
+            eventId: bin2hex(random_bytes(16)),
+            version: $this->version + 1,
+            occurredAt: new DateTimeImmutable('now', new DateTimeZone('UTC')),
+            amount: $amount,
+            comment: $comment,
         ));
     }
 
@@ -178,8 +182,11 @@ final class PayrollLine
     private function calculation(Money $amount): PayrollLineCalculated
     {
         return new PayrollLineCalculated(
-            $this->id, bin2hex(random_bytes(16)), $this->version + 1,
-            new DateTimeImmutable('now', new DateTimeZone('UTC')), $amount,
+            payrollId: $this->id,
+            eventId: bin2hex(random_bytes(16)),
+            version: $this->version + 1,
+            occurredAt: new DateTimeImmutable('now', new DateTimeZone('UTC')),
+            amount: $amount,
         );
     }
 
@@ -202,7 +209,7 @@ final class PayrollLine
      */
     private function apply(PayrollEvent $event): void
     {
-        if ($event->aggregateId !== $this->id || $event->version !== $this->version + 1 || isset($this->eventIds[$event->eventId])) {
+        if ($event->payrollId !== $this->id || $event->version !== $this->version + 1 || isset($this->eventIds[$event->eventId])) {
             throw new InvalidHistory('Event stream identity, order or uniqueness is invalid.');
         }
 

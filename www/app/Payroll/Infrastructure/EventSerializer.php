@@ -40,7 +40,7 @@ final class EventSerializer
         }
 
         return [
-            'payroll_id' => $event->aggregateId,
+            'payroll_id' => $event->payrollId,
             'event_id' => $event->eventId,
             'version' => $event->version,
             'event_type' => match ($event::class) {

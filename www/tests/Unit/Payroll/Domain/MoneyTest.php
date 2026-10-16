@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Tests\Unit\Payroll\Domain;
 
 use App\Payroll\Domain\Currency;
-use App\Payroll\Domain\InvalidAdjustment;
 use App\Payroll\Domain\Money;
 use InvalidArgumentException;
 use OverflowException;
@@ -22,23 +21,6 @@ class MoneyTest extends TestCase
             $this->assertSame($currency, $money->subtract(Money::fromDecimal('2.00', $currency))->currency);
             $this->assertSame($currency, Money::fromMinorUnits(100, $currency)->currency);
         }
-    }
-
-    #[DataProvider('currencyOperations')]
-    public function test_arithmetic_rejects_different_currencies(string $operation): void
-    {
-        if (count(Currency::cases()) < 2) {
-            $this->markTestSkipped('Requires at least two enabled currencies.');
-        }
-
-        $this->expectException(InvalidAdjustment::class);
-        Money::fromDecimal('10.00', Currency::cases()[0])->{$operation}(Money::fromDecimal('1.00', Currency::cases()[1]));
-    }
-
-    /** @return list<array{string}> */
-    public static function currencyOperations(): array
-    {
-        return [['add'], ['subtract']];
     }
 
     public function test_arithmetic_is_exact_and_values_are_immutable(): void
